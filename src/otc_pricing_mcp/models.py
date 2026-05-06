@@ -18,7 +18,7 @@ class PriceItem(BaseModel):
     Field descriptions come from the API's `columns` metadata.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     id: str
     id_group: str = Field(alias="_idGroup")
@@ -35,7 +35,7 @@ class PriceItem(BaseModel):
     opi_flavour: str = Field(alias="opiFlavour")
 
     os_unit: str = Field(alias="osUnit")
-    v_cpu: str
+    v_cpu: str = Field(alias="vCpu")
     ram: str
     storage_type: str = Field(alias="storageType")
     storage_volume: str = Field(alias="storageVolume")
