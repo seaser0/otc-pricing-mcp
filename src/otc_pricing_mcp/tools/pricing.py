@@ -2,11 +2,41 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from otc_pricing_mcp.client import OTCPricingClient
 from otc_pricing_mcp.models import PriceItem
 from otc_pricing_mcp.normalize import extract_items
+
+# Max concurrent HTTP requests for multi-service fan-out
+MAX_CONCURRENT_REQUESTS = 5
+
+
+def _fetch_service_pricing(
+    service: str,
+    params: dict[str, Any],
+) -> tuple[str, list[PriceItem], str | None]:
+    """Fetch pricing data for a single service (worker function for parallel execution).
+
+    Args:
+        service: Service name
+        params: Query parameters (including productType, limitMax, filters)
+
+    Returns:
+        Tuple of (service, items, error_message)
+        error_message is None on success, or error string on failure.
+    """
+    client = OTCPricingClient()
+    try:
+        service_params = {**params, "serviceName": service}
+        response = client.get(service_params)
+        items = extract_items(response, service)
+        return (service, items, None)
+    except Exception as e:
+        return (service, [], str(e))
+    finally:
+        client.close()
 
 
 def query_pricing(
@@ -21,6 +51,9 @@ def query_pricing(
     Filters use exact match on column values; column names come from get_service_schema.
     Each item carries its own currency (EUR or CHF depending on region).
     Pagination is automatic — the tool returns up to max_results items unless constrained.
+
+    Multi-service requests are fanned out internally with up to 5 concurrent HTTP calls.
+    Partial failures are reported in the warnings list.
 
     Args:
         services: List of service names (e.g., ['ecs', 'evs']). Required.
@@ -44,7 +77,7 @@ def query_pricing(
         # Single service, no filter
         >>> query_pricing(['ecs'])
 
-        # Multiple services with region filter
+        # Multiple services with region filter (parallel fan-out)
         >>> query_pricing(['ecs', 'evs'], region='eu-de')
 
         # With limit
@@ -67,32 +100,44 @@ def query_pricing(
     for key, value in filters.items():
         params[f"filterBy[{key}]"] = value
 
-    client = OTCPricingClient()
     all_items: dict[str, list[PriceItem]] = {}
     total_items = 0
     currencies: dict[str, int] = {}
     regions_found: set[str] = set()
     warnings: list[str] = []
 
-    try:
-        for service in services:
-            try:
-                params["serviceName"] = service
-                response = client.get(params)
-                items = extract_items(response, service)
+    # Use ThreadPoolExecutor for multi-service requests (with max concurrency)
+    if len(services) > 1:
+        with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_REQUESTS) as executor:
+            # Submit all service requests in parallel
+            futures = {
+                executor.submit(_fetch_service_pricing, service, params): service
+                for service in services
+            }
 
-                if items:
+            # Collect results as they complete
+            for future in as_completed(futures):
+                service, items, error = future.result()
+                if error:
+                    warnings.append(f"{service}: {error}")
+                elif items:
                     all_items[service] = items
                     total_items += len(items)
-
-                    # Collect metadata
                     for item in items:
                         currencies[item.currency] = currencies.get(item.currency, 0) + 1
                         regions_found.add(item.region)
-            except Exception as e:
-                warnings.append(f"{service}: {str(e)}")
-    finally:
-        client.close()
+    else:
+        # Single service: fetch directly without executor overhead
+        service = services[0]
+        _, items, error = _fetch_service_pricing(service, params)
+        if error:
+            warnings.append(f"{service}: {error}")
+        elif items:
+            all_items[service] = items
+            total_items = len(items)
+            for item in items:
+                currencies[item.currency] = currencies.get(item.currency, 0) + 1
+                regions_found.add(item.region)
 
     return {
         "services": {k: [item.model_dump() for item in v] for k, v in all_items.items()},

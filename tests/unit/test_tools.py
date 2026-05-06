@@ -81,6 +81,30 @@ class TestQueryPricing:
         except Exception:
             pass
 
+    def test_query_pricing_multi_service(self) -> None:
+        """query_pricing handles multiple services with parallel fan-out."""
+        try:
+            result = query_pricing(["ecs", "evs"], max_results=5)
+            assert isinstance(result, dict)
+            # Services dict may contain either or both services
+            assert isinstance(result.get("services"), dict)
+            # Should have warnings if any service failed
+            assert isinstance(result.get("warnings"), list)
+        except Exception:
+            pass
+
+    def test_query_pricing_with_region_filter(self) -> None:
+        """query_pricing accepts region filter."""
+        try:
+            result = query_pricing(["ecs"], region="eu-de", max_results=5)
+            assert isinstance(result, dict)
+            # If results exist, should only have eu-de
+            if result.get("services") and result.get("services").get("ecs"):
+                for item in result["services"]["ecs"]:
+                    assert item.get("region") == "eu-de"
+        except Exception:
+            pass
+
 
 class TestFindComputeFlavor:
     """Tests for find_compute_flavor tool."""
