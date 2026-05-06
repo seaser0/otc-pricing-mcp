@@ -1,17 +1,20 @@
 """MCP server for the OTC Price Calculator API.
 
 Exposes 7 MCP tools for service discovery, pricing queries, and estimation.
+Includes comprehensive logging and metrics tracking for debugging and monitoring.
 """
 
 from __future__ import annotations
 
-import logging
+import time
 from typing import Any
 
 from mcp.server import Server
 from mcp.types import TextContent, Tool
 
-logger = logging.getLogger(__name__)
+from . import observability
+
+logger = observability.get_logger(__name__)
 
 # Initialize MCP server
 server = Server("otc-pricing-mcp")
@@ -20,6 +23,7 @@ server = Server("otc-pricing-mcp")
 @server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
 async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
+    logger.debug("list_tools_called")
     tools: list[Tool] = [
         Tool(
             name="list_services",
@@ -150,20 +154,78 @@ async def list_tools() -> list[Tool]:
 
 @server.call_tool()  # type: ignore[untyped-decorator]
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Route tool calls to their implementations."""
-    if name == "list_services":
-        return [TextContent(type="text", text="Not yet implemented")]
-    elif name == "list_regions":
-        return [TextContent(type="text", text="Not yet implemented")]
-    elif name == "get_service_schema":
-        return [TextContent(type="text", text="Not yet implemented")]
-    elif name == "query_pricing":
-        return [TextContent(type="text", text="Not yet implemented")]
-    elif name == "find_compute_flavor":
-        return [TextContent(type="text", text="Not yet implemented")]
-    elif name == "estimate_monthly_cost":
-        return [TextContent(type="text", text="Not yet implemented")]
-    elif name == "compare_billing_models":
-        return [TextContent(type="text", text="Not yet implemented")]
-    else:
-        return [TextContent(type="text", text=f"Unknown tool: {name}")]
+    """Route tool calls to their implementations with logging and metrics."""
+    # Generate request ID for this tool invocation if not already set
+    request_id = observability.get_request_id()
+    if request_id is None:
+        request_id = observability.generate_request_id()
+        observability.set_request_id(request_id)
+
+    start_time = time.time()
+    logger.info(
+        "tool_invocation_start",
+        tool=name,
+        request_id=request_id,
+        arguments=arguments,
+    )
+
+    try:
+        # Route to tool implementation
+        if name == "list_services":
+            text = "Not yet implemented"
+        elif name == "list_regions":
+            text = "Not yet implemented"
+        elif name == "get_service_schema":
+            text = "Not yet implemented"
+        elif name == "query_pricing":
+            text = "Not yet implemented"
+        elif name == "find_compute_flavor":
+            text = "Not yet implemented"
+        elif name == "estimate_monthly_cost":
+            text = "Not yet implemented"
+        elif name == "compare_billing_models":
+            text = "Not yet implemented"
+        else:
+            text = f"Unknown tool: {name}"
+            logger.warning("unknown_tool_requested", tool=name, request_id=request_id)
+            observability.metrics.requests_total.labels(tool=name, status="error").inc()
+            duration = time.time() - start_time
+            observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+            return [TextContent(type="text", text=text)]
+
+        # Record success metrics
+        duration = time.time() - start_time
+        observability.metrics.requests_total.labels(tool=name, status="success").inc()
+        observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+
+        logger.info(
+            "tool_invocation_success",
+            tool=name,
+            request_id=request_id,
+            duration_seconds=duration,
+        )
+
+        return [TextContent(type="text", text=text)]
+
+    except Exception as e:
+        # Record error metrics
+        duration = time.time() - start_time
+        observability.metrics.requests_total.labels(tool=name, status="error").inc()
+        observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+
+        logger.error(
+            "tool_invocation_error",
+            tool=name,
+            request_id=request_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            duration_seconds=duration,
+            exc_info=True,
+        )
+
+        return [
+            TextContent(
+                type="text",
+                text=f"Error executing tool '{name}': {str(e)}",
+            )
+        ]

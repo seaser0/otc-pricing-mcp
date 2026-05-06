@@ -1,11 +1,12 @@
 """HTTP client wrapper for the OTC Price Calculator API.
 
 Provides a stateless, retry-capable wrapper around httpx for all API access.
+Includes comprehensive logging and metrics for debugging and monitoring.
 """
 
 from __future__ import annotations
 
-import logging
+import time
 from typing import Any
 
 import httpx
@@ -16,10 +17,10 @@ from tenacity import (
     wait_exponential,
 )
 
-from . import __version__
+from . import __version__, observability
 from .models import ApiResponse
 
-logger = logging.getLogger(__name__)
+logger = observability.get_logger(__name__)
 
 # Default API endpoint
 DEFAULT_BASE_URL = "https://calculator.otc-service.com/en/open-telekom-price-api/"
@@ -90,7 +91,7 @@ class OTCPricingClient:
         self,
         params: dict[str, Any] | None = None,
     ) -> ApiResponse:
-        """Perform a GET request to the API.
+        """Perform a GET request to the API with logging and metrics.
 
         Args:
             params: Query parameters (e.g., productType, serviceName, filterBy, limitMax).
@@ -109,26 +110,103 @@ class OTCPricingClient:
         if "productType" not in params:
             params["productType"] = "OTC"
 
+        service = params.get("serviceName", "unknown")
+        request_id = observability.get_request_id()
+        start_time = time.time()
+
+        logger.debug(
+            "upstream_request_start",
+            service=service,
+            request_id=request_id,
+            params={k: v for k, v in params.items() if k not in ["productType"]},
+        )
+
+        attempt_count = 0
+        last_error: Exception | None = None
+
         for attempt in RETRIES:
             with attempt:
-                response = client.get("/", params=params)
-                response.raise_for_status()
-
+                attempt_count += 1
                 try:
-                    data = response.json()
-                except Exception as e:
-                    raise ValueError(f"Failed to parse JSON response: {e}") from e
+                    response = client.get("/", params=params)
+                    response.raise_for_status()
 
-                # Validate structure
-                if "response" not in data:
-                    raise ValueError(
-                        f"Expected 'response' key in API response, got: {list(data.keys())}"
+                    try:
+                        data = response.json()
+                    except Exception as e:
+                        raise ValueError(f"Failed to parse JSON response: {e}") from e
+
+                    # Validate structure
+                    if "response" not in data:
+                        raise ValueError(
+                            f"Expected 'response' key in API response, got: {list(data.keys())}"
+                        )
+
+                    # Parse as ApiResponse
+                    try:
+                        api_response = ApiResponse(**data["response"])
+                    except Exception as e:
+                        raise ValueError(f"Failed to parse API response: {e}") from e
+
+                    # Record success metrics
+                    duration = time.time() - start_time
+                    observability.metrics.upstream_requests_total.labels(
+                        service=service, status="success"
+                    ).inc()
+                    observability.metrics.upstream_duration_seconds.labels(
+                        service=service
+                    ).observe(duration)
+
+                    logger.debug(
+                        "upstream_request_success",
+                        service=service,
+                        request_id=request_id,
+                        status_code=response.status_code,
+                        duration_seconds=duration,
+                        attempt=attempt_count,
+                        items_returned=api_response.stats.count if api_response.stats else 0,
                     )
 
-                # Parse as ApiResponse
-                try:
-                    return ApiResponse(**data["response"])
+                    return api_response
+
+                except httpx.HTTPError as e:
+                    last_error = e
+                    logger.warning(
+                        "upstream_request_http_error",
+                        service=service,
+                        request_id=request_id,
+                        error=str(e),
+                        status_code=getattr(e.response, "status_code", None) if hasattr(e, "response") else None,
+                        attempt=attempt_count,
+                    )
+                    raise
                 except Exception as e:
-                    raise ValueError(f"Failed to parse API response: {e}") from e
+                    last_error = e
+                    logger.error(
+                        "upstream_request_parse_error",
+                        service=service,
+                        request_id=request_id,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        attempt=attempt_count,
+                    )
+                    raise
+
+        # Record error metrics
+        duration = time.time() - start_time
+        observability.metrics.upstream_requests_total.labels(
+            service=service, status="error"
+        ).inc()
+        observability.metrics.upstream_duration_seconds.labels(service=service).observe(duration)
+
+        logger.error(
+            "upstream_request_failed",
+            service=service,
+            request_id=request_id,
+            error=str(last_error) if last_error else "Unknown error",
+            error_type=type(last_error).__name__ if last_error else "Unknown",
+            attempts=attempt_count,
+            duration_seconds=duration,
+        )
 
         raise RuntimeError("Retries exhausted")  # pragma: no cover

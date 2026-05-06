@@ -39,6 +39,11 @@ ENV PYTHONUNBUFFERED=1
 # Run as non-root user (UID 65532, built into distroless)
 USER nonroot
 
-# MCP server via STDIO transport
-# No exposed ports needed for STDIO-based MCP communication
+# Expose metrics/health port
+# Port 8080: HTTP server for /healthz, /readyz, /metrics endpoints
+EXPOSE 8080
+
+# MCP server via STDIO transport + HTTP metrics server
+# STDIO: stdin/stdout for MCP protocol
+# HTTP: port 8080 for health checks and Prometheus metrics
 CMD ["python", "-m", "otc_pricing_mcp"]
