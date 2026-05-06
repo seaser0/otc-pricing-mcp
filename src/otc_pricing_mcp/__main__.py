@@ -5,13 +5,20 @@ from __future__ import annotations
 import asyncio
 import sys
 
+from mcp.server.stdio import stdio_server
+
 from .server import server
 
 
 async def main() -> int:
-    """Run the MCP server."""
+    """Run the MCP server via STDIO transport."""
     try:
-        await server.wait()  # type: ignore[attr-defined]
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(),
+            )
         return 0
     except KeyboardInterrupt:
         return 130

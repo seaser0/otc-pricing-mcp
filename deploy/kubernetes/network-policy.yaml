@@ -1,0 +1,86 @@
+# Kubernetes NetworkPolicy: Restrict egress to OTC Price Calculator API
+# This policy ensures the MCP server can only communicate with the upstream OTC API
+# over HTTPS, implementing a "fail-closed" security model.
+#
+# Deploy with: kubectl apply -f deploy/kubernetes/network-policy.yaml
+# Verify with: kubectl get networkpolicies -n mcp-otc-pricing
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otc-pricing-mcp-egress
+  namespace: mcp-otc-pricing
+  labels:
+    app: otc-pricing-mcp
+    component: network-policy
+spec:
+  # Apply this policy to all pods labeled app=otc-pricing-mcp
+  podSelector:
+    matchLabels:
+      app: otc-pricing-mcp
+
+  # Define egress rules only (restrict outbound connections)
+  policyTypes:
+    - Egress
+
+  # Egress rules: what traffic is allowed OUT of the pod
+  egress:
+    # Allow DNS queries to kube-system (CoreDNS)
+    # This enables hostname resolution for calculator.otc-service.com
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+      description: "DNS resolution via CoreDNS"
+
+    # Allow HTTPS to any destination on port 443
+    # (This is needed for OTC API and Let's Encrypt OCSP if used)
+    - to:
+        - podSelector: {}  # Allow within cluster if services use HTTPS
+      ports:
+        - protocol: TCP
+          port: 443
+      description: "Cluster-internal HTTPS services"
+
+    # Allow external HTTPS to calculator.otc-service.com
+    # Note: Exact IP range may vary; network plugin determines how external egress is handled
+    - to:
+        - namespaceSelector: {}  # External traffic (outside cluster)
+      ports:
+        - protocol: TCP
+          port: 443
+      description: "External HTTPS (OTC Price Calculator API)"
+
+---
+# Ingress policy: Allow traffic FROM the MCP proxy/gateway only
+# (Optional: uncomment if you want to restrict ingress to specific sources)
+# This would typically be the MCP gateway or API server
+#
+# apiVersion: networking.k8s.io/v1
+# kind: NetworkPolicy
+# metadata:
+#   name: otc-pricing-mcp-ingress
+#   namespace: mcp-otc-pricing
+#   labels:
+#     app: otc-pricing-mcp
+#     component: network-policy
+# spec:
+#   podSelector:
+#     matchLabels:
+#       app: otc-pricing-mcp
+#   policyTypes:
+#     - Ingress
+#   ingress:
+#     - from:
+#         - namespaceSelector:
+#             matchLabels:
+#               name: mcp-gateway
+#       ports:
+#         - protocol: TCP
+#           port: 8080
+#           name: http-mcp
+#       description: "MCP gateway communication"

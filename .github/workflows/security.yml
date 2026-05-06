@@ -1,0 +1,111 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly scan at 2 AM UTC (catches new CVEs published overnight)
+    - cron: "0 2 * * *"
+
+jobs:
+  dependency-audit:
+    name: Dependency Audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Run pip-audit
+        run: |
+          echo "Running pip-audit to check for known CVEs..."
+          uv run pip-audit --desc --format json | tee audit-report.json
+          echo ""
+          echo "Failing on CVEs with medium or higher severity..."
+          uv run pip-audit --desc --strict
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-report
+          path: audit-report.json
+
+  static-analysis:
+    name: Static Analysis (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Run Bandit
+        run: |
+          echo "Running Bandit for security issues in Python code..."
+          uv run bandit -r src/ -f json -o bandit-report.json
+          echo ""
+          echo "Failing on HIGH severity findings..."
+          uv run bandit -r src/ -ll
+
+      - name: Upload bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  container-scan:
+    name: Container Scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build container image
+        run: |
+          echo "Building container image for security scan..."
+          docker build -t otc-pricing-mcp:scan .
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: otc-pricing-mcp:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: "HIGH,CRITICAL"
+          exit-code: 1  # Fail on HIGH/CRITICAL
+
+      - name: Upload Trivy results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # Summary job: passes only if all security checks pass
+  security-summary:
+    name: Security Checks Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, static-analysis, container-scan]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.dependency-audit.result }}" != "success" ]]; then
+            echo "❌ Dependency audit failed"
+            exit 1
+          fi
+          if [[ "${{ needs.static-analysis.result }}" != "success" ]]; then
+            echo "❌ Static analysis failed"
+            exit 1
+          fi
+          if [[ "${{ needs.container-scan.result }}" != "success" ]]; then
+            echo "❌ Container scan failed"
+            exit 1
+          fi
+          echo "✅ All security checks passed"

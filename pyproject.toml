@@ -28,6 +28,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pip-audit>=2.6.0",
     "bandit>=1.7.5",
+    "cyclonedx-bom>=4.0.0",
 ]
 
 [project.urls]
