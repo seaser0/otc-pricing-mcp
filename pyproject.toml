@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "otc-pricing-mcp"
+version = "0.1.0"
+description = "MCP server for Open Telekom Cloud Price Calculator API"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "NEVIT", email = "platform@nevit.ch" }]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=0.1.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.0",
+    "structlog>=24.1.0",
+    "prometheus-client>=0.18.0",
+    "tenacity>=8.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pytest>=7.4.0",
+    "pytest-vcr>=1.0.0",
+    "pytest-cov>=4.1.0",
+    "pip-audit>=2.6.0",
+    "bandit>=1.7.5",
+]
+
+[project.urls]
+Repository = "https://github.com/seaser0/otc-pricing-mcp"
+Issues = "https://github.com/seaser0/otc-pricing-mcp/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/otc_pricing_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort
+    "C4",   # flake8-comprehensions
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "prometheus_client.*",
+    "mcp.*",
+    "tenacity.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+addopts = "-v --cov=src/otc_pricing_mcp --cov-report=term-missing --cov-report=html"
+testpaths = ["tests"]
+markers = [
+    "live: marks tests that hit the real API (deselect with '-m \"not live\"')",
+    "integration: marks integration tests",
+    "unit: marks unit tests",
+]
+
+[tool.coverage.run]
+source = ["src/otc_pricing_mcp"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+precision = 2

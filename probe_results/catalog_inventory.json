@@ -1,0 +1,991 @@
+{
+  "probe_date": "2026-05-06T16:26:23.279580",
+  "services": [
+    {
+      "service": "aom",
+      "total": 6,
+      "returned": 6,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "apig",
+      "total": 12,
+      "returned": 12,
+      "regions": [
+        "eu-ch2",
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-ch2",
+          "EUR"
+        ],
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "apm2",
+      "total": 1,
+      "returned": 1,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "bms",
+      "total": 6,
+      "returned": 6,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "buc",
+      "total": 2,
+      "returned": 2,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cbr",
+      "total": 8,
+      "returned": 8,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cce",
+      "total": 13,
+      "returned": 13,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cci",
+      "total": 2,
+      "returned": 2,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cco",
+      "total": 1,
+      "returned": 1,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cf",
+      "total": 2,
+      "returned": 2,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "coss",
+      "total": 59,
+      "returned": 59,
+      "regions": [
+        "eu-ch2",
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-ch2",
+          "EUR"
+        ],
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "csbs",
+      "total": 1,
+      "returned": 1,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cse",
+      "total": 4,
+      "returned": 4,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "css",
+      "total": 36,
+      "returned": 36,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "csscln",
+      "total": 30,
+      "returned": 30,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "csscon",
+      "total": 30,
+      "returned": 30,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cssman",
+      "total": 30,
+      "returned": 30,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "cwaf",
+      "total": 8,
+      "returned": 8,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "da",
+      "total": 4,
+      "returned": 4,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "das",
+      "total": 5,
+      "returned": 5,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dc",
+      "total": 23,
+      "returned": 23,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dcs",
+      "total": 448,
+      "returned": 448,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dcsb",
+      "total": 2,
+      "returned": 2,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dcsetup",
+      "total": 2,
+      "returned": 2,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "ddm",
+      "total": 4,
+      "returned": 4,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dds",
+      "total": 40,
+      "returned": 40,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "ddsog",
+      "total": 16,
+      "returned": 16,
+      "regions": [
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "ddsrs",
+      "total": 16,
+      "returned": 16,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "ddssn",
+      "total": 14,
+      "returned": 14,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "deh",
+      "total": 29,
+      "returned": 29,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dehl",
+      "total": 12,
+      "returned": 12,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dins",
+      "total": 41,
+      "returned": 41,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dis",
+      "total": 6,
+      "returned": 6,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dli",
+      "total": 5,
+      "returned": 5,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dms",
+      "total": 8,
+      "returned": 8,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dmsip",
+      "total": 20,
+      "returned": 20,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dmsk",
+      "total": 26,
+      "returned": 26,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dmsrmq",
+      "total": 6,
+      "returned": 6,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dmsvol",
+      "total": 8,
+      "returned": 8,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dnprq",
+      "total": 9,
+      "returned": 9,
+      "regions": [
+        "eu-ch2",
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-ch2",
+          "EUR"
+        ],
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dnq",
+      "total": 9,
+      "returned": 9,
+      "regions": [
+        "eu-ch2",
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-ch2",
+          "EUR"
+        ],
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "drs",
+      "total": 188,
+      "returned": 188,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dss",
+      "total": 3,
+      "returned": 3,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "dws",
+      "total": 7,
+      "returned": 7,
+      "regions": [
+        "eu-de"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "ecs",
+      "total": 828,
+      "returned": 828,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "phz",
+      "total": 8,
+      "returned": 8,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    },
+    {
+      "service": "prhz",
+      "total": 8,
+      "returned": 8,
+      "regions": [
+        "eu-de",
+        "eu-nl"
+      ],
+      "currencies": [
+        "EUR"
+      ],
+      "region_currency_pairs": [
+        [
+          "eu-de",
+          "EUR"
+        ],
+        [
+          "eu-nl",
+          "EUR"
+        ]
+      ]
+    }
+  ],
+  "all_regions": [
+    "eu-ch2",
+    "eu-de",
+    "eu-nl"
+  ],
+  "all_currencies": [
+    "EUR"
+  ],
+  "all_region_currency_pairs": [
+    [
+      "eu-ch2",
+      "EUR"
+    ],
+    [
+      "eu-de",
+      "EUR"
+    ],
+    [
+      "eu-nl",
+      "EUR"
+    ]
+  ]
+}
