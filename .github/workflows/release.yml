@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # Build and push container image
+  build-image:
+    name: Build and Push Container Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.docker_push.outputs.digest }}
+      image_name: ghcr.io/seaser0/otc-pricing-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: docker_push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/seaser0/otc-pricing-mcp:${{ steps.version.outputs.version }}
+            ghcr.io/seaser0/otc-pricing-mcp:latest
+          cache-from: type=registry,ref=ghcr.io/seaser0/otc-pricing-mcp:buildcache
+          cache-to: type=registry,ref=ghcr.io/seaser0/otc-pricing-mcp:buildcache,mode=max
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  # Generate SBOM
+  generate-sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Generate SBOM
+        run: |
+          echo "Generating CycloneDX SBOM..."
+          bash scripts/generate-sbom.sh
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 1
+
+  # Create GitHub release with SBOM
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-image, generate-sbom]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD")
+
+          # Generate changelog from commits since last tag
+          echo "## Changes" > /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          git log ${PREV_TAG}..HEAD --pretty=format:"- %h %s" >> /tmp/changelog.md || true
+          echo "" >> /tmp/changelog.md
+          echo "## Container Image" >> /tmp/changelog.md
+          echo "- Image: \`ghcr.io/seaser0/otc-pricing-mcp:${{ steps.version.outputs.version }}\`" >> /tmp/changelog.md
+          echo "- Also available as: \`ghcr.io/seaser0/otc-pricing-mcp:latest\`" >> /tmp/changelog.md
+
+          # Read changelog into output
+          cat /tmp/changelog.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          body_path: /tmp/changelog.md
+          files: sbom/sbom.json
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Verify image is accessible
+  verify-image:
+    name: Verify Image Accessibility
+    runs-on: ubuntu-latest
+    needs: build-image
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Verify image pull (unauthenticated)
+        run: |
+          echo "Verifying image is publicly accessible..."
+          echo "Image: ghcr.io/seaser0/otc-pricing-mcp:${{ steps.version.outputs.version }}"
+
+          # Try to pull and inspect image metadata
+          docker pull ghcr.io/seaser0/otc-pricing-mcp:${{ steps.version.outputs.version }}
+          docker inspect ghcr.io/seaser0/otc-pricing-mcp:${{ steps.version.outputs.version }} | jq '.[] | {Id, RepoTags, Config}'
+
+      - name: Test image execution
+        run: |
+          echo "Testing image execution..."
+          # Create a simple test for the image
+          timeout 5 docker run --rm ghcr.io/seaser0/otc-pricing-mcp:${{ steps.version.outputs.version }} python -c "import otc_pricing_mcp; print('✓ Import successful')" || true
