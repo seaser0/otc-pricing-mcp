@@ -88,6 +88,10 @@ markers = [
     "unit: marks unit tests",
 ]
 
+[tool.pytest-vcr]
+cassette_library_dir = "tests/integration/cassettes"
+record_mode = "once"
+
 [tool.coverage.run]
 source = ["src/otc_pricing_mcp"]
 branch = true
