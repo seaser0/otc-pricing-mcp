@@ -30,9 +30,13 @@ spec:
   # Ingress rules: what traffic is allowed INTO the pod
   ingress:
     # Allow HTTP traffic from nginx Ingress controller (port 8080).
-    # The ingress-nginx controller runs in the headscale namespace on this cluster.
+    # The main ingress controller (open-appsec) runs in the appsec namespace.
+    # The headscale-specific ingress controller runs in the headscale namespace.
     # Use the standard kubernetes.io/metadata.name label (auto-applied since K8s 1.21).
     - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: appsec
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: headscale
