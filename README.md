@@ -1,5 +1,10 @@
 # OTC Pricing MCP Server
 
+[![CI](https://github.com/seaser0/otc-pricing-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/seaser0/otc-pricing-mcp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/seaser0/otc-pricing-mcp)](https://github.com/seaser0/otc-pricing-mcp/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 An open-source **Model Context Protocol (MCP)** server for the **Open Telekom Cloud (OTC) Price Calculator API**.
 
 Expose OTC pricing data to Claude and other LLM clients with full observability (structured logging, Prometheus metrics, health checks).
