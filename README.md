@@ -9,21 +9,20 @@ An open-source **Model Context Protocol (MCP)** server for the **Open Telekom Cl
 
 Expose OTC pricing data to Claude and other LLM clients with full observability (structured logging, Prometheus metrics, health checks).
 
-**Status**: v0.1.0 (Core functionality complete, Stories 0-7)
+**Status**: v0.1.3 — STDIO + SSE transports, Kubernetes deployment, full observability
 
 ---
 
 ## What is MCP?
 
-**Model Context Protocol** is a standard that enables LLM applications (like Claude) to interact with external tools via a protocol called **STDIO transport**.
+**Model Context Protocol** is a standard that enables LLM applications (like Claude) to interact with external tools and data sources. This server supports two transports:
 
-In simple terms:
-- Your MCP server runs as a process
-- Claude connects to it via stdin/stdout
-- Claude can call your tools with parameters
-- Your server returns results back to Claude
+| Transport | How it works | Best for |
+|-----------|-------------|----------|
+| **STDIO** | Claude launches the server as a subprocess; communication is over stdin/stdout | Local Claude Desktop, CLI tools |
+| **SSE** | Server-Sent Events over HTTP — Claude connects to a URL | Remote/hosted deployments, web clients |
 
-This server gives Claude access to OTC pricing data through 7 specialized tools.
+This server gives Claude access to OTC pricing data through 7 specialized tools, on whichever transport you prefer.
 
 ---
 
@@ -57,15 +56,15 @@ python -m otc_pricing_mcp
 
 **What You'll See:**
 ```
-{"timestamp": "2026-05-06T18:00:00.123456Z", "event": "metrics_server_started", "port": 8080, "thread": "metrics-server"}
-{"timestamp": "2026-05-06T18:00:00.456789Z", "event": "mcp_server_ready", "status": "accepting_connections"}
+{"event": "mcp_server_starting", "transports": ["stdio", "sse"], "port": 8080, ...}
+{"event": "mcp_server_ready", "status": "accepting_connections", ...}
 ```
 
-The server is now listening for MCP connections on stdin/stdout.
+The server now listens for MCP connections on **both** stdin/stdout and `http://localhost:8080/sse`.
 
 ### 2. Connect Your MCP Client
 
-If you're using Claude desktop or another MCP client, configure it to connect:
+**Option A — STDIO (local, Claude Desktop)**
 
 ```json
 {
@@ -80,6 +79,29 @@ If you're using Claude desktop or another MCP client, configure it to connect:
     }
   }
 }
+```
+
+**Option B — SSE (remote, Kubernetes)**
+
+Point any MCP client that supports SSE transport at the hosted endpoint:
+
+```json
+{
+  "mcpServers": {
+    "otc-pricing": {
+      "url": "https://mcp-otc-pricing.nevit.ch/sse"
+    }
+  }
+}
+```
+
+Or test locally while running the server:
+
+```bash
+# In a second terminal:
+curl -N http://localhost:8080/sse
+# event: endpoint
+# data: /messages/?session_id=<uuid>
 ```
 
 ### 3. Start Using Tools
@@ -264,9 +286,17 @@ python -m otc_pricing_mcp 2>/var/log/otc-pricing-mcp.log
 python -m otc_pricing_mcp 2>&1 | jq .
 ```
 
-### Prometheus Metrics
+### HTTP Endpoints (port 8080)
 
-HTTP server on port 8080 exposes Prometheus metrics and health checks.
+The uvicorn server exposes all endpoints on port 8080:
+
+| Path | Method | Description |
+|------|--------|-------------|
+| `/sse` | GET | MCP SSE transport — connect your MCP client here |
+| `/messages/` | POST | MCP SSE message handler (used internally by the client) |
+| `/healthz` | GET | Liveness probe — always 200 if the process is up |
+| `/readyz` | GET | Readiness probe — 200 when OTC API is reachable, 503 otherwise |
+| `/metrics` | GET | Prometheus metrics in text exposition format |
 
 **Health Checks:**
 ```bash
@@ -447,14 +477,21 @@ docker run \
 
 ### Kubernetes Deployment
 
-See `deploy/kubernetes/deployment.yaml` for a complete example.
+See `deploy/kubernetes/` for the full manifest set (Deployment, Service, Ingress, NetworkPolicy, ServiceMonitor, PodDisruptionBudget).
+
+The server is deployed to `https://mcp-otc-pricing.nevit.ch` via ArgoCD. Connect remote clients to:
+```
+https://mcp-otc-pricing.nevit.ch/sse
+```
 
 Key features:
-- Non-root user (distroless image)
-- Resource limits (CPU, memory)
+- Non-root user, read-only root filesystem
+- Resource limits (100m–500m CPU, 128Mi–512Mi RAM)
 - Liveness probe: GET /healthz on port 8080
 - Readiness probe: GET /readyz on port 8080
+- NetworkPolicy: ingress from nginx controller only, egress to DNS + OTC API
 - ServiceMonitor for Prometheus scraping
+- Managed by ArgoCD with `selfHeal: true` and `prune: true`
 
 ---
 
@@ -464,58 +501,48 @@ Key features:
 
 ```
 Claude Client
-    ↓
-MCP STDIO Transport (stdin/stdout)
-    ↓
-MCP Server (server.py)
-  - List tools
-  - Route tool calls
-  - Log invocations
-  - Record metrics
-    ↓
-HTTP Client (client.py)
-  - Build request
-  - Retry logic (exponential backoff)
-  - Parse response
-  - Log API calls
-  - Record metrics
-    ↓
-OTC Price Calculator API
-    ↓
-(Response flows back through each layer)
+    │
+    ├─ STDIO transport (local)      ──┐
+    │  stdin/stdout                   │
+    │                                 ▼
+    └─ SSE transport (remote)      MCP Server (server.py)
+       GET  /sse                     - List tools
+       POST /messages/               - Route tool calls
+                                     - Log invocations
+                                     - Record metrics
+                                         │
+                                         ▼
+                                   HTTP Client (client.py)
+                                     - Build request
+                                     - Retry logic
+                                     - Parse response
+                                         │
+                                         ▼
+                                   OTC Price Calculator API
 ```
+
+Both transports share the same MCP Server instance and run concurrently in the same asyncio event loop.
 
 ### Component Overview
 
 | Component | Purpose |
 |-----------|---------|
-| `__main__.py` | Entry point, launches STDIO server + HTTP metrics server |
+| `__main__.py` | Entry point — runs STDIO + uvicorn SSE concurrently |
 | `server.py` | MCP server, routes tool calls, logs invocations |
 | `client.py` | HTTP client for OTC API, retry logic, API logging |
 | `tools/` | Tool implementations (discovery, pricing, estimation) |
-| `observability/` | Logging, metrics, health checks |
+| `observability/http_server.py` | Starlette app — SSE transport + health/metrics routes |
+| `observability/` | Logging, Prometheus metrics, request context |
 | `models.py` | Data models (validated with Pydantic) |
 | `normalize.py` | Price parsing and formatting |
 
 ---
 
-## Open Features (Future Development)
+## Enhancement Ideas (Future Development)
 
-This v0.1.0 implementation provides the core MCP server with full observability.
+Stories 0–9 are complete. The following are post-v1.0 enhancements:
 
-Future stories can add these features:
-
-### Story 8: ArgoCD Deployment (Kubernetes)
-- Deploy to k3s cluster with ArgoCD
-- Auto-sync from git repository
-- Kustomize overlays for dev/staging/prod
-
-### Story 9: Open Source Documentation
-- Publish to GitHub with CONTRIBUTING.md
-- API documentation (OpenAPI spec)
-- Architecture decision records (ADRs)
-
-### Enhancement Ideas (Post-v1.0)
+### Enhancement Ideas
 
 **Caching**
 - Cache pricing data for N seconds to reduce API load
@@ -618,10 +645,10 @@ See [SECURITY.md](SECURITY.md) for responsible disclosure.
 | 3 | Multi-service fan-out | ✅ Done |
 | 4 | Comprehensive testing | ✅ Done |
 | 5 | Security & container hardening | ✅ Done |
-| 6 | CI/CD pipeline | ✅ Done |
-| 7 | Observability (logging, metrics, health) | ✅ Done |
-| 8 | ArgoCD deployment | 🔄 Next |
-| 9 | Open source documentation | 🔄 Next |
+| 6 | CI/CD pipeline (GHCR image, PyPI, SBOM, GitHub Release) | ✅ Done |
+| 7 | Observability (structured logging, Prometheus metrics, health probes) | ✅ Done |
+| 8 | ArgoCD deployment (Kubernetes, SSE transport, remote endpoint) | ✅ Done |
+| 9 | Open source documentation (README, server.json, community docs) | ✅ Done |
 
 ---
 
@@ -636,4 +663,4 @@ See [docs/](docs/) directory for detailed documentation:
 <!-- mcp-name: io.github.seaser0/otc-pricing-mcp -->
 **Built with ❤️ by NEVIT**
 
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-07*

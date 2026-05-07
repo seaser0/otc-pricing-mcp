@@ -1,8 +1,12 @@
 """CLI entry point for the OTC Pricing MCP server.
 
-Starts both the MCP STDIO server and the HTTP metrics/health server concurrently.
-The STDIO server handles MCP protocol communication.
-The HTTP server (port 8080) exposes /healthz, /readyz, and /metrics endpoints.
+Starts both MCP transports concurrently in the same asyncio event loop:
+- STDIO transport  — for local MCP clients (Claude Desktop, CLI tools)
+- SSE transport    — for remote/web MCP clients via HTTP on port 8080
+
+The SSE endpoint is available at http://<host>:8080/sse.
+Health and metrics endpoints (/healthz, /readyz, /metrics) are served on the
+same port by the same uvicorn server.
 """
 
 from __future__ import annotations
@@ -10,11 +14,12 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from threading import Thread
 
+import uvicorn
 from mcp.server.stdio import stdio_server
 
 from . import observability
+from .observability import http_server
 from .server import server
 
 # Configure logging first so everything can be logged
@@ -23,21 +28,28 @@ logger = observability.get_logger(__name__)
 
 
 async def main() -> int:
-    """Run the MCP server with metrics/health HTTP server in background."""
+    """Run the MCP server with STDIO and SSE transports concurrently."""
     try:
-        # Start HTTP metrics/health server in background thread
-        metrics_port = int(os.getenv("METRICS_PORT", "8080"))
-        metrics_thread = Thread(
-            target=observability.http_server.start,
-            args=(metrics_port,),
-            daemon=True,
-            name="metrics-server",
-        )
-        metrics_thread.start()
-        logger.info("metrics_server_started", port=metrics_port, thread=metrics_thread.name)
+        port = int(os.getenv("METRICS_PORT", "8080"))
 
-        # Run MCP STDIO server (main loop)
-        logger.info("mcp_server_starting", transport="stdio")
+        # Build Starlette app: SSE transport + health/metrics routes
+        app = http_server.create_app(server)
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=port,
+            log_config=None,   # don't override our structlog setup
+            access_log=False,  # silence uvicorn access logs (structlog handles this)
+        )
+        uv_server = uvicorn.Server(config)
+
+        logger.info("mcp_server_starting", transports=["stdio", "sse"], port=port)
+
+        # Start uvicorn as a background asyncio task so it keeps running
+        # even after STDIO exits (e.g. when K8s stdin is /dev/null)
+        uvicorn_task = asyncio.create_task(uv_server.serve(), name="uvicorn")
+
+        # Run STDIO transport — exits immediately in K8s (stdin = /dev/null)
         async with stdio_server() as (read_stream, write_stream):
             logger.info("mcp_server_ready", status="accepting_connections")
             await server.run(
@@ -46,10 +58,9 @@ async def main() -> int:
                 server.create_initialization_options(),
             )
 
-        # stdio_server() closes stdout on exit, so no logging is possible here.
-        # Block indefinitely so the HTTP metrics/health server stays alive
-        # for Kubernetes liveness and readiness probes (K8s idle mode).
-        await asyncio.sleep(float("inf"))
+        # STDIO has exited.  Uvicorn keeps the process alive so SSE clients and
+        # Kubernetes liveness/readiness probes continue to work.
+        await uvicorn_task
         return 0
     except KeyboardInterrupt:
         logger.info("mcp_server_shutdown", reason="keyboard_interrupt")
