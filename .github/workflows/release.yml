@@ -128,6 +128,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Publish Python package to PyPI
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [build-image, generate-sbom]
+    permissions:
+      id-token: write  # Required for OIDC trusted publishing — no API token needed
+    environment:
+      name: pypi
+      url: https://pypi.org/project/otc-pricing-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        run: uv publish
+
   # Verify image is accessible
   verify-image:
     name: Verify Image Accessibility
