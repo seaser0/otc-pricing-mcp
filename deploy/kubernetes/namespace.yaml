@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-otc-pricing
+  labels:
+    name: mcp-otc-pricing
+    monitoring: prometheus

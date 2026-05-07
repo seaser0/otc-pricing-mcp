@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: otc-pricing-mcp
+  namespace: mcp-otc-pricing
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  labels:
+    app: otc-pricing-mcp
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - mcp-otc-pricing.nevit.ch
+    secretName: otc-pricing-mcp-tls
+  rules:
+  - host: mcp-otc-pricing.nevit.ch
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: otc-pricing-mcp
+            port:
+              number: 8080

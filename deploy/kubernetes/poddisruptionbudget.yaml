@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otc-pricing-mcp
+  namespace: mcp-otc-pricing
+  labels:
+    app: otc-pricing-mcp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: otc-pricing-mcp

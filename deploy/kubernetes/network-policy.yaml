@@ -1,6 +1,8 @@
-# Kubernetes NetworkPolicy: Restrict egress to OTC Price Calculator API
-# This policy ensures the MCP server can only communicate with the upstream OTC API
-# over HTTPS, implementing a "fail-closed" security model.
+# Kubernetes NetworkPolicy: Restrict ingress and egress traffic
+# This policy ensures the MCP server can only:
+# - Accept traffic from the nginx Ingress controller (port 8080)
+# - Send traffic to DNS (port 53) and HTTPS (port 443)
+# Implements a "fail-closed" security model.
 #
 # Deploy with: kubectl apply -f deploy/kubernetes/network-policy.yaml
 # Verify with: kubectl get networkpolicies -n mcp-otc-pricing
@@ -9,7 +11,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: otc-pricing-mcp-egress
+  name: otc-pricing-mcp
   namespace: mcp-otc-pricing
   labels:
     app: otc-pricing-mcp
@@ -20,9 +22,23 @@ spec:
     matchLabels:
       app: otc-pricing-mcp
 
-  # Define egress rules only (restrict outbound connections)
+  # Define both ingress and egress rules
   policyTypes:
+    - Ingress
     - Egress
+
+  # Ingress rules: what traffic is allowed INTO the pod
+  ingress:
+    # Allow HTTP traffic from nginx Ingress controller (port 8080)
+    # The ingress controller is typically in ingress-nginx namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+      description: "Metrics/health endpoints from Ingress controller"
 
   # Egress rules: what traffic is allowed OUT of the pod
   egress:
@@ -54,33 +70,3 @@ spec:
         - protocol: TCP
           port: 443
       description: "External HTTPS (OTC Price Calculator API)"
-
----
-# Ingress policy: Allow traffic FROM the MCP proxy/gateway only
-# (Optional: uncomment if you want to restrict ingress to specific sources)
-# This would typically be the MCP gateway or API server
-#
-# apiVersion: networking.k8s.io/v1
-# kind: NetworkPolicy
-# metadata:
-#   name: otc-pricing-mcp-ingress
-#   namespace: mcp-otc-pricing
-#   labels:
-#     app: otc-pricing-mcp
-#     component: network-policy
-# spec:
-#   podSelector:
-#     matchLabels:
-#       app: otc-pricing-mcp
-#   policyTypes:
-#     - Ingress
-#   ingress:
-#     - from:
-#         - namespaceSelector:
-#             matchLabels:
-#               name: mcp-gateway
-#       ports:
-#         - protocol: TCP
-#           port: 8080
-#           name: http-mcp
-#       description: "MCP gateway communication"

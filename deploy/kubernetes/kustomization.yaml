@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mcp-otc-pricing
+
+labels:
+- includeSelectors: true
+  pairs:
+    app: otc-pricing-mcp
+    managed-by: argocd
+
+resources:
+- namespace.yaml
+- deployment.yaml
+- service.yaml
+- ingress.yaml
+- servicemonitor.yaml
+- poddisruptionbudget.yaml
+- network-policy.yaml
+
+images:
+- name: ghcr.io/seaser0/otc-pricing-mcp
+  newTag: latest
+
+configMapGenerator:
+- name: otc-pricing-mcp-config
+  literals:
+  - LOG_LEVEL=INFO
+  - METRICS_PORT=8080
