@@ -46,4 +46,4 @@ EXPOSE 8080
 # MCP server via STDIO transport + HTTP metrics server
 # STDIO: stdin/stdout for MCP protocol
 # HTTP: port 8080 for health checks and Prometheus metrics
-CMD ["python", "-m", "otc_pricing_mcp"]
+CMD ["/app/.venv/bin/python", "-m", "otc_pricing_mcp"]
