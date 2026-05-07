@@ -18,14 +18,18 @@ RUN uv sync --frozen --no-dev
 # Copy source code
 COPY src/ ./src/
 
-# Stage 2: Runtime with distroless
-# distroless provides minimal attack surface: no shell, no package manager
-FROM gcr.io/distroless/python3-debian12:nonroot
+# Stage 2: Runtime — python:3.12-slim matches the builder's Python version.
+# distroless/python3-debian12 ships Python 3.11, which is incompatible with
+# a venv and native extensions (pydantic-core, cryptography) built for 3.12.
+FROM python:3.12-slim
+
+# Create a non-root user with the same UID (65532) used by distroless nonroot,
+# so Kubernetes securityContext runAsUser values stay consistent.
+RUN useradd --no-create-home --no-log-init --uid 65532 --gid 0 nonroot
 
 # Copy virtual environment and source from builder
-# --chown ensures correct permissions (nonroot user is UID 65532)
-COPY --from=builder --chown=nonroot:nonroot /app/.venv /app/.venv
-COPY --from=builder --chown=nonroot:nonroot /app/src /app/src
+COPY --from=builder --chown=65532:0 /app/.venv /app/.venv
+COPY --from=builder --chown=65532:0 /app/src /app/src
 
 # Set working directory and Python path
 WORKDIR /app
@@ -36,7 +40,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Ensure Python output is sent straight to logs without buffering
 ENV PYTHONUNBUFFERED=1
 
-# Run as non-root user (UID 65532, built into distroless)
+# Run as non-root user (UID 65532)
 USER nonroot
 
 # Expose metrics/health port
