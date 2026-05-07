@@ -633,8 +633,7 @@ See [docs/](docs/) directory for detailed documentation:
 - `docs/security.md` — Security features and considerations
 
 ---
-
+<!-- mcp-name: io.github.seaser0/otc-pricing-mcp -->
 **Built with ❤️ by NEVIT**
 
 *Last updated: 2026-05-06*
-<!-- mcp-name: io.github.seaser0/otc-pricing-mcp -->
