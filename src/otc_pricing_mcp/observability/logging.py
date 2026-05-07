@@ -47,7 +47,9 @@ def configure_logging(log_level: str = "INFO") -> None:
             structlog.processors.JSONRenderer(),  # JSON output
         ],
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        # Write to stderr so logs are visible after stdio_server() closes stdout
+        # and are properly captured by `kubectl logs` in Kubernetes.
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
         cache_logger_on_first_use=False,
         wrapper_class=structlog.make_filtering_bound_logger(int(getattr(logging, log_level))),
     )
