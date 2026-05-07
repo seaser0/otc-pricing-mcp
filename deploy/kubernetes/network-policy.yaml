@@ -39,7 +39,6 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
-      description: "Metrics/health endpoints from Ingress controller"
 
   # Egress rules: what traffic is allowed OUT of the pod
   egress:
@@ -54,7 +53,6 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-      description: "DNS resolution via CoreDNS"
 
     # Allow outbound HTTPS to any destination (external OTC API + cluster services).
     # An egress rule with ports but no `to` selector allows traffic to all destinations,
@@ -62,4 +60,3 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
-      description: "HTTPS to OTC Price Calculator API and cluster services"
