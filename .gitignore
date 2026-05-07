@@ -14,6 +14,7 @@ htmlcov/
 .ruff_cache/
 *.log
 .DS_Store
+server.json
 probe_results/*.json
 !probe_results/catalog_inventory.json
 !probe_results/filter_test_*.json
