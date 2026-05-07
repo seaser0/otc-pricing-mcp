@@ -6,6 +6,7 @@ build/
 .venv/
 venv/
 .uv/
+.claude/
 .pytest_cache/
 .coverage
 htmlcov/
