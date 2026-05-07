@@ -16,7 +16,7 @@ echo "Generating CycloneDX SBOM from locked dependencies..."
 # Generate SBOM from pyproject.toml and uv.lock
 # Format: CycloneDX JSON (machine-readable)
 # Includes all runtime dependencies (no dev dependencies)
-uv run cyclonedx-bom generate \
+uv run --dev cyclonedx-bom generate \
     --format json \
     --output sbom.json \
     --specVersion 1.5 \
