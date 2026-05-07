@@ -45,6 +45,12 @@ async def main() -> int:
                 write_stream,
                 server.create_initialization_options(),
             )
+
+        # Stdin closed (no MCP client connected — typical in Kubernetes).
+        # Keep the process alive so the HTTP metrics/health server continues
+        # to respond to liveness and readiness probes.
+        logger.info("mcp_stdio_idle", reason="stdin_eof")
+        await asyncio.sleep(float("inf"))
         return 0
     except KeyboardInterrupt:
         logger.info("mcp_server_shutdown", reason="keyboard_interrupt")
