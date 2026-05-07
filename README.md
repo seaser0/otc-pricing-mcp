@@ -637,3 +637,4 @@ See [docs/](docs/) directory for detailed documentation:
 **Built with ❤️ by NEVIT**
 
 *Last updated: 2026-05-06*
+<!-- mcp-name: io.github.seaser0/otc-pricing-mcp -->
