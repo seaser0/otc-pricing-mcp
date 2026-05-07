@@ -13,14 +13,18 @@ cd "$PROJECT_ROOT"
 
 echo "Generating CycloneDX SBOM from locked dependencies..."
 
-# Generate SBOM from pyproject.toml and uv.lock
-# Format: CycloneDX JSON (machine-readable)
-# Includes all runtime dependencies (no dev dependencies)
-uv run --dev cyclonedx-bom generate \
-    --format json \
-    --output sbom.json \
-    --specVersion 1.5 \
-    pyproject.toml
+# Build a clean production-only venv (no dev extras) so the SBOM reflects
+# what is actually shipped in the Docker image.
+uv sync --frozen --no-dev
+
+# Run cyclonedx-py via uvx so it is isolated from the production venv.
+# cyclonedx-bom v4+ uses 'cyclonedx-py environment <python>' instead of
+# the old 'cyclonedx-bom generate ... pyproject.toml' interface.
+uvx --from cyclonedx-bom cyclonedx-py environment \
+    --of JSON \
+    --sv 1.5 \
+    -o sbom.json \
+    .venv/bin/python
 
 # Verify the SBOM was created
 if [ -f sbom.json ]; then
