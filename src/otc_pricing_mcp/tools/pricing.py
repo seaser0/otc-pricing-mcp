@@ -8,6 +8,7 @@ from typing import Any
 from otc_pricing_mcp.client import OTCPricingClient
 from otc_pricing_mcp.models import PriceItem
 from otc_pricing_mcp.normalize import extract_items
+from otc_pricing_mcp.tools.discovery import list_regions
 
 # Max concurrent HTTP requests for multi-service fan-out
 MAX_CONCURRENT_REQUESTS = 5
@@ -70,8 +71,12 @@ def query_pricing(
             'total_items': int,
             'currency_breakdown': {currency: count, ...},
             'regions_found': [region, ...],
-            'warnings': [str, ...] (if any service failed)
+            'warnings': [str, ...]  (upstream errors; triggers isError=true server-side)
+            'notes': [str, ...]     (informational; e.g. valid combo with zero rows)
         }
+
+    Raises:
+        ValueError: If services is empty or region is not in the known region set.
 
     Examples:
         # Single service, no filter
@@ -85,6 +90,16 @@ def query_pricing(
     """
     if not services:
         raise ValueError("At least one service name is required")
+
+    # Validate region against the known set so callers get a clear failure
+    # instead of a silent empty result (see issue #6).
+    if region is not None:
+        known_regions = list_regions()
+        if region not in known_regions:
+            raise ValueError(
+                f"Unknown region '{region}'. Known regions: {known_regions}. "
+                f"Use list_regions() to discover available regions."
+            )
 
     max_results = max_results or 5000
 
@@ -105,6 +120,8 @@ def query_pricing(
     currencies: dict[str, int] = {}
     regions_found: set[str] = set()
     warnings: list[str] = []
+    services_with_zero_rows: list[str] = []
+    services_with_error: set[str] = set()
 
     # Use ThreadPoolExecutor for multi-service requests (with max concurrency)
     if len(services) > 1:
@@ -120,24 +137,42 @@ def query_pricing(
                 service, items, error = future.result()
                 if error:
                     warnings.append(f"{service}: {error}")
+                    services_with_error.add(service)
                 elif items:
                     all_items[service] = items
                     total_items += len(items)
                     for item in items:
                         currencies[item.currency] = currencies.get(item.currency, 0) + 1
                         regions_found.add(item.region)
+                else:
+                    services_with_zero_rows.append(service)
     else:
         # Single service: fetch directly without executor overhead
         service = services[0]
         _, items, error = _fetch_service_pricing(service, params)
         if error:
             warnings.append(f"{service}: {error}")
+            services_with_error.add(service)
         elif items:
             all_items[service] = items
             total_items = len(items)
             for item in items:
                 currencies[item.currency] = currencies.get(item.currency, 0) + 1
                 regions_found.add(item.region)
+        else:
+            services_with_zero_rows.append(service)
+
+    # Surface zero-row outcomes as informational notes so callers can tell
+    # "request succeeded, no rows" apart from "request silently failed" (#6).
+    notes: list[str] = []
+    for service in sorted(services_with_zero_rows):
+        if region:
+            notes.append(
+                f"{service}/{region}: upstream returned 0 rows for this combination "
+                f"(the region may not be exposed by the price calculator API for this service)"
+            )
+        else:
+            notes.append(f"{service}: upstream returned 0 rows")
 
     return {
         "services": {k: [item.model_dump() for item in v] for k, v in all_items.items()},
@@ -145,6 +180,7 @@ def query_pricing(
         "currency_breakdown": currencies,
         "regions_found": sorted(regions_found),
         "warnings": warnings if warnings else [],
+        "notes": notes,
     }
 
 
@@ -164,10 +200,18 @@ def find_compute_flavor(
         region: Region (default: 'eu-de'). Options: 'eu-de', 'eu-nl', 'eu-ch2'.
 
     Returns:
-        {'matches': [<flavor records>], 'warnings': [<upstream error strings>]}
+        {
+            'matches': [<flavor records>],
+            'warnings': [<upstream error strings>],
+            'notes': [<informational strings>, e.g. zero-row notice for the region]
+        }
+
+    Raises:
+        ValueError: If region is not in the known region set.
     """
     result = query_pricing(["ecs"], region=region, max_results=5000)
     upstream_warnings: list[str] = list(result.get("warnings", []))
+    upstream_notes: list[str] = list(result.get("notes", []))
 
     matches: list[dict[str, Any]] = []
     for item_dict in result.get("services", {}).get("ecs", []):
@@ -194,4 +238,4 @@ def find_compute_flavor(
 
         matches.append(item_dict)
 
-    return {"matches": matches, "warnings": upstream_warnings}
+    return {"matches": matches, "warnings": upstream_warnings, "notes": upstream_notes}
