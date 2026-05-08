@@ -54,9 +54,7 @@ async def readyz(request: Request) -> Response:
     async with _readyz_lock:
         # Return cached result if still fresh
         if _last_api_check and (now - _last_api_check["timestamp"]) < _api_check_cache_ttl:
-            return JSONResponse(
-                _last_api_check["response"], status_code=_last_api_check["status"]
-            )
+            return JSONResponse(_last_api_check["response"], status_code=_last_api_check["status"])
 
         # Probe the OTC API
         try:
@@ -105,9 +103,10 @@ def create_app(mcp_server: Server) -> Starlette:
     async def handle_sse(request: Request) -> Response:
         """Accept an SSE connection and run the MCP server over it."""
         logger.info("sse_client_connected", client=request.client)
-        async with sse_transport.connect_sse(
-            request.scope, request.receive, request._send
-        ) as (read_stream, write_stream):
+        async with sse_transport.connect_sse(request.scope, request.receive, request._send) as (
+            read_stream,
+            write_stream,
+        ):
             await mcp_server.run(
                 read_stream,
                 write_stream,

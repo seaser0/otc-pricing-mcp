@@ -42,7 +42,7 @@ async def main() -> int:
             app,
             host=host,
             port=port,
-            log_config=None,   # don't override our structlog setup
+            log_config=None,  # don't override our structlog setup
             access_log=False,  # silence uvicorn access logs (structlog handles this)
         )
         uv_server = uvicorn.Server(config)
