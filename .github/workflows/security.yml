@@ -57,13 +57,14 @@ jobs:
       - name: Install dependencies (with dev extras)
         run: uv sync --extra dev
 
-      - name: Run Bandit
-        run: |
-          echo "Running Bandit for security issues in Python code..."
-          uv run bandit -r src/ -f json -o bandit-report.json
-          echo ""
-          echo "Failing on HIGH severity findings..."
-          uv run bandit -r src/ -ll
+      # Two steps so the JSON-report producer can't kill the whole job (#25):
+      # the report writer has no severity filter and exits 1 on the existing
+      # 4 LOW findings. Only the gated call should fail the build.
+      - name: Run Bandit (write JSON report; never fails the step)
+        run: uv run bandit -r src/ -f json -o bandit-report.json --exit-zero
+
+      - name: Run Bandit (gate on MEDIUM+ severity)
+        run: uv run bandit -r src/ -ll
 
       - name: Upload bandit report
         if: always()
@@ -83,16 +84,29 @@ jobs:
           echo "Building container image for security scan..."
           docker build -t otc-pricing-mcp:scan .
 
-      - name: Run Trivy scan
+      # SARIF + ignore-unfixed don't combine cleanly: the SARIF writer
+      # ignores the post-filter set when computing exit-code, so the job
+      # fails on unfixed distro CVEs even though the gate says skip them.
+      # Split into two scans (#26): one purely for the SARIF upload, one
+      # that gates the build. Both reuse the local image cache.
+      - name: Trivy — SARIF report for GitHub Security
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: otc-pricing-mcp:scan
           format: sarif
           output: trivy-results.sarif
           severity: "HIGH,CRITICAL"
+          exit-code: 0  # never fails the build; just produces the SARIF
+
+      - name: Trivy — gate (HIGH/CRITICAL with a published fix)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: otc-pricing-mcp:scan
+          format: table
+          severity: "HIGH,CRITICAL"
           # Skip CVEs without an upstream fix — see SECURITY.md.
           ignore-unfixed: true
-          exit-code: 1  # Fail on HIGH/CRITICAL with a published fix
+          exit-code: 1
 
       - name: Upload Trivy results to GitHub Security
         if: always()
