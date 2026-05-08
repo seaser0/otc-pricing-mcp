@@ -106,7 +106,7 @@ def create_app(mcp_server: Server) -> Starlette:
         """Accept an SSE connection and run the MCP server over it."""
         logger.info("sse_client_connected", client=request.client)
         async with sse_transport.connect_sse(
-            request.scope, request.receive, request._send  # type: ignore[attr-defined]
+            request.scope, request.receive, request._send
         ) as (read_stream, write_stream):
             await mcp_server.run(
                 read_stream,
