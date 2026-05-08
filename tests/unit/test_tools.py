@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from otc_pricing_mcp.tools import pricing as pricing_module
 from otc_pricing_mcp.tools.discovery import get_service_schema, list_regions, list_services
 from otc_pricing_mcp.tools.estimation import compare_billing_models, estimate_monthly_cost
 from otc_pricing_mcp.tools.pricing import find_compute_flavor, query_pricing
@@ -105,6 +106,65 @@ class TestQueryPricing:
         except Exception:
             pass
 
+    def test_query_pricing_unknown_region_raises(self) -> None:
+        """query_pricing rejects regions outside the known set (#6)."""
+        with pytest.raises(ValueError, match="Unknown region 'mars-1'"):
+            query_pricing(["ecs"], region="mars-1")
+
+    def test_query_pricing_unknown_region_lists_known(self) -> None:
+        """The error message names the regions a caller can use (#6)."""
+        with pytest.raises(ValueError, match="eu-de"):
+            query_pricing(["ecs"], region="not-a-region")
+
+    def test_query_pricing_known_region_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All entries in list_regions() must be accepted by query_pricing (#6)."""
+
+        def _fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            return (service, [], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", _fake_fetch)
+        for region in list_regions():
+            result = query_pricing(["ecs"], region=region, max_results=1)
+            assert isinstance(result, dict)
+            assert result["total_items"] == 0
+            assert result["warnings"] == []
+
+    def test_query_pricing_zero_rows_emits_note(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Valid region with zero upstream rows surfaces a note, not a warning (#6).
+
+        Notes are informational; they must NOT trigger isError on the server.
+        """
+
+        def _fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            return (service, [], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", _fake_fetch)
+        result = query_pricing(["ecs"], region="eu-ch2", max_results=5)
+
+        assert result["total_items"] == 0
+        assert result["warnings"] == []
+        assert "notes" in result
+        assert any("ecs/eu-ch2" in note for note in result["notes"])
+        assert any("0 rows" in note for note in result["notes"])
+
+    def test_query_pricing_upstream_error_emits_warning_not_note(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Hard upstream errors keep going to warnings, not to notes (#6)."""
+
+        def _fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            return (service, [], "boom: upstream HTTP 500")
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", _fake_fetch)
+        result = query_pricing(["ecs"], region="eu-de", max_results=5)
+
+        assert result["warnings"] != []
+        assert any("boom" in w for w in result["warnings"])
+        # Errored services must not also appear as zero-row notes.
+        assert all("ecs/eu-de" not in note for note in result.get("notes", []))
+
 
 class TestFindComputeFlavor:
     """Tests for find_compute_flavor tool."""
@@ -132,6 +192,11 @@ class TestFindComputeFlavor:
             assert isinstance(result, list)
         except Exception:
             pass
+
+    def test_find_compute_flavor_unknown_region_raises(self) -> None:
+        """find_compute_flavor propagates the region-validation ValueError (#6)."""
+        with pytest.raises(ValueError, match="Unknown region"):
+            find_compute_flavor(v_cpu=4, ram_gb=16, region="mars-1")
 
 
 class TestEstimateMonthlyCost:
