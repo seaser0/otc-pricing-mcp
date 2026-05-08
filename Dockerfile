@@ -7,16 +7,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy dependency definitions
+# Copy dependency definitions and the source tree the build backend needs.
+# `data/` is referenced by `[tool.hatch.build.targets.wheel.force-include]`
+# in pyproject.toml — without it, `uv sync` fails the in-place editable
+# build with "Forced include not found".
 COPY pyproject.toml uv.lock README.md ./
+COPY src/ ./src/
+COPY data/ ./data/
 
 # Install dependencies to virtual environment
 # --frozen prevents uv from modifying the lock file
 # --no-dev excludes development dependencies (bandit, mypy, pytest, etc.)
 RUN uv sync --frozen --no-dev
-
-# Copy source code
-COPY src/ ./src/
 
 # Stage 2: Runtime — python:3.12-slim matches the builder's Python version.
 # distroless/python3-debian12 ships Python 3.11, which is incompatible with
@@ -27,9 +29,12 @@ FROM python:3.12-slim
 # so Kubernetes securityContext runAsUser values stay consistent.
 RUN useradd --no-create-home --no-log-init --uid 65532 --gid 0 nonroot
 
-# Copy virtual environment and source from builder
+# Copy virtual environment, source, and the docs FTS5 index from builder.
+# The runtime uses PYTHONPATH=/app/src so it loads from the source tree;
+# tools/docs.py's path-resolver walks up to find /app/data/otc_docs.sqlite3.
 COPY --from=builder --chown=65532:0 /app/.venv /app/.venv
 COPY --from=builder --chown=65532:0 /app/src /app/src
+COPY --from=builder --chown=65532:0 /app/data /app/data
 
 # Set working directory and Python path
 WORKDIR /app
