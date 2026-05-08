@@ -78,32 +78,71 @@ def list_regions() -> list[str]:
 def get_service_schema(service: str) -> dict[str, Any]:
     """Get the schema (columns) for a service.
 
+    The upstream OTC API returns the same generic catalog schema for every
+    service — the per-service projection is approximated here by sampling
+    one row of the service and tagging which columns actually carry a value
+    (`actually_used_columns`). See #37.
+
     Args:
         service: Service name (e.g., 'ecs').
 
     Returns:
-        Dictionary with service metadata and available columns.
-        Structure: {
+        Dictionary with service metadata and available columns. Structure:
+        {
             'service': str,
-            'columns': {column_name: column_label, ...},
-            'filterable_columns': [str, ...],
-            'returnable_columns': [str, ...]
+            'columns': {column_name: column_label, ...},  # full upstream catalog
+            'filterable_columns': [str, ...],             # all columns the API accepts as filterBy
+            'returnable_columns': [str, ...],             # all columns ever returned
+            'actually_used_columns': [str, ...],          # subset that has a non-empty value on a sample row
+            'note': str,                                  # warning that columns is the global catalog
         }
 
     Raises:
-        ValueError: If service not found.
+        ValueError: If service is empty/missing or not in the known catalog (#35).
     """
+    if not service or not service.strip():
+        raise ValueError("service is required and must be a non-empty string")
+    known = list_services()
+    if known and service not in known:
+        # Show only a small sample so the error message stays readable.
+        sample = known[:20]
+        raise ValueError(
+            f"Service {service!r} not found in catalog. "
+            f"Known (first {len(sample)} of {len(known)}): {sample}. "
+            f"Use list_services() for the full list."
+        )
+
     client = OTCPricingClient()
     try:
         response = client.get({"serviceName": service, "limitMax": "1"})
         if not response.columns:
             raise ValueError(f"Service '{service}' not found or has no columns")
 
+        # Best-effort actually_used projection: look at the first returned row.
+        actually_used: list[str] = []
+        sample_row: dict[str, Any] | None = None
+        if isinstance(response.result, dict):
+            rows = response.result.get(service) or []
+            if rows:
+                sample_row = rows[0]
+        elif isinstance(response.result, list) and response.result:
+            sample_row = response.result[0]
+        if isinstance(sample_row, dict):
+            actually_used = sorted(
+                k for k, v in sample_row.items() if v not in ("", None, [], {}, "0")
+            )
+
         return {
             "service": service,
             "columns": response.columns,
             "filterable_columns": sorted(response.columns.keys()),
             "returnable_columns": sorted(response.columns.keys()),
+            "actually_used_columns": actually_used,
+            "note": (
+                "`columns` is the upstream API's GLOBAL catalog — every service "
+                "shares the same schema. Filter on `actually_used_columns` for "
+                "fields that are populated for THIS service (sample of 1 row)."
+            ),
         }
     finally:
         client.close()

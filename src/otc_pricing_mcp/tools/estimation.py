@@ -90,6 +90,16 @@ def estimate_monthly_cost(
     if not items:
         raise ValueError("At least one item is required")
 
+    # Validate quantity / hours upfront so a fat-fingered LLM doesn't get back
+    # a negative-cost "estimate" silently (#36).
+    for idx, item in enumerate(items):
+        if "quantity" in item and float(item["quantity"]) < 1:
+            raise ValueError(f"items[{idx}].quantity must be >= 1 (got {item['quantity']})")
+        if "hours_per_month" in item and float(item["hours_per_month"]) < 0:
+            raise ValueError(
+                f"items[{idx}].hours_per_month must be >= 0 (got {item['hours_per_month']})"
+            )
+
     # Collect all unique product IDs
     product_ids = list({item["id"] for item in items if "id" in item})
     if not product_ids:
@@ -198,6 +208,13 @@ def estimate_monthly_cost(
         item_record["tiers_available"] = tiers_available_for_item
         item_results.append(item_record)
 
+    # Track product IDs that the user asked for but the upstream catalog did
+    # not return. Without this, an unknown id silently produces total_payg=0
+    # (#31) — the same anti-pattern issues #4/#6 caught for query_pricing.
+    requested_ids = [item["id"] for item in items if item.get("id")]
+    unknown_product_ids = sorted({pid for pid in requested_ids if pid not in product_data})
+    warnings = [f"Product '{pid}' not found in OTC catalog" for pid in unknown_product_ids]
+
     # A tier total is None when at least one priced item lacks that tier —
     # mixing apples and pears into a single 'total' would be misleading.
     result: dict[str, Any] = {
@@ -216,6 +233,8 @@ def estimate_monthly_cost(
             tiers_unavailable.append(tier)
 
     result["tiers_unavailable"] = tiers_unavailable
+    result["unknown_product_ids"] = unknown_product_ids
+    result["warnings"] = warnings
     result["items"] = item_results
     return result
 
@@ -269,6 +288,11 @@ def compare_billing_models(
         # Compare for 2 units
         >>> compare_billing_models('OTC_S3M1_LI', quantity=2)
     """
+    if quantity < 1:
+        raise ValueError(f"quantity must be >= 1 (got {quantity})")
+    if hours_per_month < 0:
+        raise ValueError(f"hours_per_month must be >= 0 (got {hours_per_month})")
+
     estimation = estimate_monthly_cost(
         [
             {
@@ -293,16 +317,22 @@ def compare_billing_models(
             return {"available": False}
         total = monthly * months + upfront
         monthly_equivalent = total / months
-        savings = (
-            ((payg_monthly - monthly_equivalent) / payg_monthly * 100) if payg_monthly > 0 else 0
-        )
+        # Report the true savings_percent (may be negative if reserved is more
+        # expensive than PAYG at this usage level — see #32). The previous
+        # max(0.0, ...) clamp hid the case where reserved is a bad fit.
+        savings: float
+        if payg_monthly > 0:
+            savings = (payg_monthly - monthly_equivalent) / payg_monthly * 100
+        else:
+            savings = 0.0  # PAYG = 0 → savings ratio is undefined; report 0.
         return {
             "available": True,
             "monthly_cost": monthly,
             "upfront_cost": upfront,
             "total_cost": total,
             "monthly_equivalent": monthly_equivalent,
-            "savings_percent": max(0.0, savings),  # Negative savings clamped to 0
+            "savings_percent": savings,
+            "reserved_more_expensive_than_payg": savings < 0,
         }
 
     return {
