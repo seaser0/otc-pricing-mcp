@@ -16,6 +16,7 @@ from mcp.types import CallToolResult, TextContent, Tool
 
 from . import observability
 from .tools.discovery import get_service_schema, list_regions, list_services
+from .tools.docs import get_otc_doc_section, search_otc_docs
 from .tools.estimation import compare_billing_models, estimate_monthly_cost
 from .tools.pricing import find_compute_flavor, query_pricing
 
@@ -153,6 +154,63 @@ async def list_tools() -> list[Tool]:
                 "required": ["product_id"],
             },
         ),
+        Tool(
+            name="search_otc_docs",
+            description=(
+                "Full-text search across the indexed Open Telekom Cloud user manual "
+                "and API reference. Returns ranked snippets with canonical doc URLs. "
+                "Source: opentelekomcloud-docs/<service> RST repos (Apache-2.0)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search terms (BM25-ranked, AND of tokens)",
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["public", "swiss", "both"],
+                        "description": "Filter by cloud (default: both)",
+                    },
+                    "service": {
+                        "type": "string",
+                        "description": (
+                            "Optional service to constrain results "
+                            "(e.g. 'elastic-cloud-server', 'elastic-volume-service')"
+                        ),
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Number of hits to return (1-50, default: 5)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="get_otc_doc_section",
+            description=(
+                "Fetch the indexed body of one OTC documentation page (or a single "
+                "section of it) as Markdown. Use the URL returned by search_otc_docs."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Canonical docs URL, optionally with #anchor",
+                    },
+                    "section": {
+                        "type": "string",
+                        "description": (
+                            "Optional H2/H3 heading filter (case-insensitive substring)"
+                        ),
+                    },
+                },
+                "required": ["url"],
+            },
+        ),
     ]
     return tools
 
@@ -259,6 +317,37 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
                 arguments.get("hours_per_month", 730.0),
             )
             text = json.dumps(result, ensure_ascii=False)
+        elif name == "search_otc_docs":
+            result = await asyncio.to_thread(
+                search_otc_docs,
+                arguments["query"],
+                arguments.get("scope", "both"),
+                arguments.get("service"),
+                arguments.get("top_k", 5),
+            )
+            text = json.dumps(result, ensure_ascii=False)
+        elif name == "get_otc_doc_section":
+            result = await asyncio.to_thread(
+                get_otc_doc_section,
+                arguments["url"],
+                arguments.get("section"),
+            )
+            text = json.dumps(result, ensure_ascii=False)
+            # Treat 'no rows matched' as an explicit error so callers don't
+            # silently get back an empty page (#4 / #6 anti-pattern).
+            if not result.get("matched"):
+                duration = time.time() - start_time
+                observability.metrics.requests_total.labels(tool=name, status="error").inc()
+                observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+                logger.warning(
+                    "tool_invocation_url_not_indexed",
+                    tool=name,
+                    request_id=request_id,
+                    url=arguments["url"],
+                    section=arguments.get("section"),
+                    duration_seconds=duration,
+                )
+                return _err(text)
         else:
             text = f"Unknown tool: {name}"
             logger.warning("unknown_tool_requested", tool=name, request_id=request_id)

@@ -17,3 +17,10 @@ htmlcov/
 probe_results/*.json
 !probe_results/catalog_inventory.json
 !probe_results/filter_test_*.json
+
+# SQLite WAL / shared-memory side files. The committed FTS5 index
+# (data/otc_docs.sqlite3) is checkpointed before commit; WAL/SHM are
+# transient and should never be tracked.
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+data/*.sqlite3.tmp

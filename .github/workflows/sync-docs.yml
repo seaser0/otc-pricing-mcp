@@ -1,0 +1,78 @@
+name: Sync OTC Docs Index
+
+on:
+  schedule:
+    # Weekly Monday 03:00 UTC — well after the OTC docs nightly republish.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Override service allow-list (space-separated, leave blank for default)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync opentelekomcloud-docs → SQLite FTS5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (sync extras)
+        run: uv sync --extra sync
+
+      - name: Run sync script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "${{ inputs.services }}" ]; then
+            uv run python scripts/sync_otc_docs.py -v --services ${{ inputs.services }}
+          else
+            uv run python scripts/sync_otc_docs.py -v
+          fi
+
+      - name: Inspect resulting index
+        run: |
+          ls -lh data/otc_docs.sqlite3 data/otc_docs.manifest.json
+          uv run python3 -c "
+          import json, sqlite3
+          m = json.load(open('data/otc_docs.manifest.json'))
+          print('schema:', m['schema_version'], 'sections:', m['section_count'])
+          print('services:')
+          for s in m['services']:
+              print(f\"  {s['service']:32} {s['upstream_commit'][:8]} files={s['rst_files_seen']:>4} sections={s['sections_indexed']}\")
+          if m['skipped']:
+              print('skipped:', m['skipped'])
+          con = sqlite3.connect('data/otc_docs.sqlite3')
+          print('FTS5 row count:', con.execute('SELECT COUNT(*) FROM docs').fetchone()[0])
+          "
+
+      - name: Open PR if anything changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(docs): refresh OTC docs FTS5 index"
+          branch: chore/sync-otc-docs
+          delete-branch: true
+          title: "chore(docs): refresh OTC docs FTS5 index"
+          body: |
+            Automated weekly sync of `data/otc_docs.sqlite3` and
+            `data/otc_docs.manifest.json` from the upstream
+            `opentelekomcloud-docs/<service>` repos.
+
+            Review the manifest diff to see which services advanced;
+            no source-code changes are expected.
+          add-paths: |
+            data/otc_docs.sqlite3
+            data/otc_docs.manifest.json
+          labels: |
+            automated
+            documentation

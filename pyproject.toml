@@ -32,6 +32,12 @@ dev = [
     "bandit>=1.7.5",
     "cyclonedx-bom>=4.0.0",
 ]
+# Used only by scripts/sync_otc_docs.py (CI / maintainer workflow), not at runtime.
+# Runtime tools just query the pre-built SQLite FTS5 index — no RST parsing.
+sync = [
+    "docutils>=0.21",
+    "markdownify>=0.13",
+]
 
 [project.urls]
 Repository = "https://github.com/seaser0/otc-pricing-mcp"
@@ -39,6 +45,13 @@ Issues = "https://github.com/seaser0/otc-pricing-mcp/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/otc_pricing_mcp"]
+
+# Bundle the pre-built SQLite FTS5 index of the OTC docs into the wheel so
+# the docs tools work out of the box after `pip install otc-pricing-mcp`.
+# The file is regenerated weekly by .github/workflows/sync-docs.yml.
+[tool.hatch.build.targets.wheel.force-include]
+"data/otc_docs.sqlite3" = "otc_pricing_mcp/data/otc_docs.sqlite3"
+"data/otc_docs.manifest.json" = "otc_pricing_mcp/data/otc_docs.manifest.json"
 
 [tool.ruff]
 line-length = 100
