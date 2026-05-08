@@ -407,3 +407,243 @@ class TestReservedTierAvailability:
         for tier in ("reserved_12m", "reserved_24m", "reserved_36m"):
             assert result[tier]["available"] is True
             assert "savings_percent" in result[tier]
+
+
+# ---------------------------------------------------------------------------
+# QA bug-bash from 2026-05-08 (issues #30-#37). Each test below pins an
+# end-state contract that the original bug violated.
+# ---------------------------------------------------------------------------
+
+
+class TestFindComputeFlavorFiltersStorage:
+    """Issue #30 — find_compute_flavor must NOT return EVS storage rows."""
+
+    def test_v_cpu_zero_raises(self) -> None:
+        with pytest.raises(ValueError, match="v_cpu must be >= 1"):
+            find_compute_flavor(v_cpu=0, ram_gb=0)
+
+    def test_negative_v_cpu_raises(self) -> None:
+        with pytest.raises(ValueError, match="v_cpu must be >= 1"):
+            find_compute_flavor(v_cpu=-1, ram_gb=1)
+
+    def test_zero_ram_raises(self) -> None:
+        with pytest.raises(ValueError, match="ram_gb must be > 0"):
+            find_compute_flavor(v_cpu=1, ram_gb=0)
+
+    def test_storage_rows_filtered_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Even at a valid v_cpu/ram, EVS rows that happen to share the
+        upstream service must be skipped via product_family check."""
+        # Build a fake query_pricing result with one Compute and one Storage row
+        # at the same v_cpu/ram values. The Storage row must NOT appear in matches.
+        from otc_pricing_mcp.models import PriceItem
+        from otc_pricing_mcp.tools.pricing import _fetch_service_pricing  # noqa: F401
+
+        def _row(**overrides: Any) -> PriceItem:
+            base: dict[str, Any] = {
+                "id": "X",
+                "_idGroup": "X",
+                "idGroupTiered": "",
+                "productId": "ECS",
+                "productName": "X",
+                "productType": "OTC",
+                "productFamily": "Compute",
+                "productCategory": "",
+                "productIdParameter": "ecs",
+                "productSection": "main",
+                "serviceType": "s3",
+                "opiFlavour": "s3.x.1",
+                "osUnit": "Linux",
+                "vCpu": "2",
+                "ram": "4 GiB",
+                "storageType": "",
+                "storageVolume": "",
+                "currency": "EUR",
+                "priceAmount": "1 EUR",
+                "unit": "hour",
+                "description": "",
+                "region": "eu-de",
+                "isMRC": False,
+                "fromOn": 1,
+                "upTo": 1,
+                "minAmount": 0,
+                "maxAmount": 0,
+                "additionalText": "",
+                "R12": "0",
+                "R24": "0",
+                "R36": "0",
+                "RU12": "0",
+                "RU24": "0",
+                "RU36": "0",
+            }
+            base.update(overrides)
+            return PriceItem.model_validate(base)
+
+        compute_row = _row()
+        storage_row = _row(
+            id="Y",
+            productName="EVS",
+            productFamily="Storage",
+            productSection="storage",
+            opiFlavour="vss.sas",
+            osUnit="Standard",
+            unit="GB",
+            description="EVS",
+            priceAmount="0.06 EUR",
+        )
+
+        def fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            return (service, [compute_row, storage_row], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", fake_fetch)
+        result = find_compute_flavor(v_cpu=2, ram_gb=4, region="eu-de")
+
+        assert len(result["matches"]) == 1
+        assert result["matches"][0]["product_family"] == "Compute"
+        assert all(m["product_family"] == "Compute" for m in result["matches"])
+
+
+class TestQueryPricingMaxResultsValidation:
+    """Issue #33 — max_results=0 must NOT collapse to default 5000."""
+
+    def test_max_results_zero_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_results must be >= 1"):
+            query_pricing(["ecs"], region="eu-de", max_results=0)
+
+    def test_max_results_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_results must be >= 1"):
+            query_pricing(["ecs"], region="eu-de", max_results=-1)
+
+    def test_max_results_none_uses_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict = {}
+
+        def fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            captured["limitMax"] = params.get("limitMax")
+            return (service, [], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", fake_fetch)
+        query_pricing(["ecs"], region="eu-de", max_results=None)
+        assert captured["limitMax"] == "5000"
+
+
+class TestEstimateMonthlyCostUnknownProduct:
+    """Issue #31 — silent total_payg=0 for unknown product IDs is now surfaced."""
+
+    def test_unknown_id_in_warnings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Empty upstream — nothing matches.
+        class _Empty:
+            result: dict = {"ecs": []}
+
+        class _C:
+            def __init__(self) -> None:
+                pass
+
+            def get(self, p: dict) -> Any:
+                return _Empty()
+
+            def close(self) -> None:
+                pass
+
+        monkeypatch.setattr(estimation_module, "OTCPricingClient", _C)
+        result = estimate_monthly_cost([{"id": "BOGUS"}])
+        assert result["unknown_product_ids"] == ["BOGUS"]
+        assert any("BOGUS" in w for w in result["warnings"])
+        assert result["items"] == []
+        assert result["total_payg"] == 0.0
+
+    def test_partial_unknown_keeps_known_in_total(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Mixed batch: one known product, one unknown id. Known item must
+        # still be priced; unknown must surface in warnings.
+        product = {
+            "id": "OTC_KNOWN",
+            "currency": "EUR",
+            "priceAmount": "0.10 EUR",
+            "R12": "60.00 EUR",
+            "R24": "50.00 EUR",
+            "R36": "40.00 EUR",
+            "RU12": "100.00 EUR",
+            "RU24": "200.00 EUR",
+            "RU36": "300.00 EUR",
+        }
+        _stub_product_data(monkeypatch, product)
+        result = estimate_monthly_cost([{"id": "OTC_KNOWN"}, {"id": "OTC_NOPE"}])
+        assert "OTC_NOPE" in result["unknown_product_ids"]
+        assert "OTC_KNOWN" not in result["unknown_product_ids"]
+        assert len(result["items"]) == 1
+        assert result["total_payg"] > 0
+
+
+class TestEstimateNegativeQuantity:
+    """Issue #36 — negative quantity / hours must raise."""
+
+    def test_negative_quantity_raises(self) -> None:
+        with pytest.raises(ValueError, match="quantity must be >= 1"):
+            estimate_monthly_cost([{"id": "X", "quantity": -1}])
+
+    def test_negative_hours_raises(self) -> None:
+        with pytest.raises(ValueError, match="hours_per_month must be >= 0"):
+            estimate_monthly_cost([{"id": "X", "hours_per_month": -1}])
+
+    def test_compare_negative_quantity_raises(self) -> None:
+        with pytest.raises(ValueError, match="quantity must be >= 1"):
+            compare_billing_models("X", quantity=-1)
+
+    def test_compare_negative_hours_raises(self) -> None:
+        with pytest.raises(ValueError, match="hours_per_month must be >= 0"):
+            compare_billing_models("X", hours_per_month=-1)
+
+
+class TestCompareBillingNegativeSavings:
+    """Issue #32 — savings_percent must be allowed to be negative."""
+
+    def test_low_usage_reports_negative_savings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # PAYG at 168h * 0.05 = €8.40/mo, reserved_12m monthly_eq ~€25/mo
+        # → savings should be a clearly-negative double-digit number.
+        product = {
+            "id": "OTC_LOW",
+            "currency": "EUR",
+            "priceAmount": "0.05 EUR",
+            "R12": "20.00 EUR",
+            "R24": "15.00 EUR",
+            "R36": "10.00 EUR",
+            "RU12": "50.00 EUR",
+            "RU24": "100.00 EUR",
+            "RU36": "150.00 EUR",
+        }
+        _stub_product_data(monkeypatch, product)
+        result = compare_billing_models("OTC_LOW", hours_per_month=168)
+        for tier in ("reserved_12m", "reserved_24m", "reserved_36m"):
+            assert result[tier]["available"] is True
+            assert result[tier]["savings_percent"] < 0, (
+                f"{tier} savings should be negative but was {result[tier]['savings_percent']}"
+            )
+            assert result[tier]["reserved_more_expensive_than_payg"] is True
+
+    def test_high_usage_reports_positive_savings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        product = {
+            "id": "OTC_HIGH",
+            "currency": "EUR",
+            "priceAmount": "0.20 EUR",
+            "R12": "60.00 EUR",
+            "R24": "50.00 EUR",
+            "R36": "40.00 EUR",
+            "RU12": "100.00 EUR",
+            "RU24": "200.00 EUR",
+            "RU36": "300.00 EUR",
+        }
+        _stub_product_data(monkeypatch, product)
+        result = compare_billing_models("OTC_HIGH", hours_per_month=730)
+        for tier in ("reserved_12m", "reserved_24m", "reserved_36m"):
+            assert result[tier]["savings_percent"] > 0
+            assert result[tier]["reserved_more_expensive_than_payg"] is False
+
+
+class TestGetServiceSchemaValidation:
+    """Issue #35 + #37 — empty/unknown rejected; schema flags global catalog."""
+
+    def test_empty_service_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            get_service_schema("")
+
+    def test_whitespace_service_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            get_service_schema("   ")

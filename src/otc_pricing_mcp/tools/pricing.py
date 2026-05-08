@@ -101,7 +101,13 @@ def query_pricing(
                 f"Use list_regions() to discover available regions."
             )
 
-    max_results = max_results or 5000
+    # Distinguish "omitted" (default 5000) from "explicitly 0/negative".
+    # Falsy-check `max_results or 5000` collapses 0 → 5000 which silently
+    # returns the full default page (see #33).
+    if max_results is None:
+        max_results = 5000
+    elif max_results < 1:
+        raise ValueError(f"max_results must be >= 1 (got {max_results})")
 
     params: dict[str, Any] = {
         "productType": "OTC",
@@ -207,14 +213,28 @@ def find_compute_flavor(
         }
 
     Raises:
-        ValueError: If region is not in the known region set.
+        ValueError: If region is not in the known region set, or if v_cpu/ram_gb
+                    are not strictly positive (a 0-cpu/0-ram instance is nonsense
+                    and used to silently match EVS storage rows — see #30).
     """
+    if v_cpu < 1:
+        raise ValueError(f"v_cpu must be >= 1 (got {v_cpu})")
+    if ram_gb <= 0:
+        raise ValueError(f"ram_gb must be > 0 (got {ram_gb})")
+
     result = query_pricing(["ecs"], region=region, max_results=5000)
     upstream_warnings: list[str] = list(result.get("warnings", []))
     upstream_notes: list[str] = list(result.get("notes", []))
 
     matches: list[dict[str, Any]] = []
     for item_dict in result.get("services", {}).get("ecs", []):
+        # The price-calculator returns EVS storage rows under serviceName=ecs
+        # (with product_id_parameter='ecs' but product_family='Storage'). We
+        # want compute only — see #30.
+        family = str(item_dict.get("product_family", "")).strip().lower()
+        if family != "compute":
+            continue
+
         v_cpu_str = str(item_dict.get("v_cpu", "")).strip()
         ram_str = str(item_dict.get("ram", "")).strip()
 

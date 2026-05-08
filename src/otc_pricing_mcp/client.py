@@ -25,6 +25,17 @@ logger = observability.get_logger(__name__)
 # Default API endpoint
 DEFAULT_BASE_URL = "https://calculator.otc-service.com/en/open-telekom-price-api/"
 
+
+class UpstreamError(RuntimeError):
+    """Raised when the upstream OTC API returns an error.
+
+    The message is intentionally short and does NOT include the full upstream
+    URL (which would leak the internal endpoint and our query-string into the
+    MCP error channel — see #34). Callers / observers can correlate via the
+    structlog `upstream_request_http_error` log line if needed.
+    """
+
+
 # Retry configuration
 RETRIES = Retrying(
     retry=retry_if_exception_type(httpx.HTTPError),
@@ -171,17 +182,32 @@ class OTCPricingClient:
 
                 except httpx.HTTPError as e:
                     last_error = e
+                    status = (
+                        getattr(e.response, "status_code", None) if hasattr(e, "response") else None
+                    )
                     logger.warning(
                         "upstream_request_http_error",
                         service=service,
                         request_id=request_id,
                         error=str(e),
-                        status_code=getattr(e.response, "status_code", None)
-                        if hasattr(e, "response")
-                        else None,
+                        status_code=status,
                         attempt=attempt_count,
                     )
-                    raise
+                    # Sanitised re-raise: the default httpx message includes
+                    # the full upstream URL with our query-string, which leaks
+                    # internals into the MCP error channel (#34). Replace with
+                    # a short, intent-preserving message.
+                    if status is not None:
+                        if status == 500 and "serviceName" in str(getattr(e, "request", "")):
+                            raise UpstreamError(
+                                f"Service '{service}' not in OTC catalog "
+                                f"(or upstream rejected the request). "
+                                f"Use list_services() to discover available services."
+                            ) from None
+                        raise UpstreamError(
+                            f"upstream HTTP {status} for service {service!r}"
+                        ) from None
+                    raise UpstreamError(f"upstream HTTP error for service {service!r}") from None
                 except Exception as e:
                     last_error = e
                     logger.error(
