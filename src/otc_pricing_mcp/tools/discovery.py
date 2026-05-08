@@ -6,108 +6,73 @@ from typing import Any
 
 from otc_pricing_mcp.client import OTCPricingClient
 
-# Service catalog (populated at module load)
+# All three OTC regions, confirmed against the live API.
+# eu-ch2 (Swiss OTC, CHF) only carries a subset of services (obs, kms, lts,
+# hss, ito, apig, etc.) and never appears in per-service probes with small
+# limitMax values, so region discovery must not rely on service sampling.
+_KNOWN_REGIONS = ["eu-ch2", "eu-de", "eu-nl"]
+
+# Service catalog (populated on first call)
 _SERVICES_CACHE: list[str] | None = None
-_REGIONS_CACHE: set[str] | None = None
-_SERVICE_SCHEMAS_CACHE: dict[str, dict[str, Any]] | None = None
 
 
-def _load_catalog() -> tuple[list[str], set[str]]:
-    """Load service and region lists from API (cached after first call)."""
-    global _SERVICES_CACHE, _REGIONS_CACHE
+def _load_catalog() -> list[str]:
+    """Discover available services from the API (cached after first call).
 
-    if _SERVICES_CACHE is not None and _REGIONS_CACHE is not None:
-        return (_SERVICES_CACHE, _REGIONS_CACHE)
+    Makes two requests:
+    1. limitMax=1 (no serviceName) to read stats.count — total items in catalog.
+    2. limitMax=stats.count to fetch the full catalog; the response dict keys
+       are the service names.
+    """
+    global _SERVICES_CACHE
+
+    if _SERVICES_CACHE is not None:
+        return _SERVICES_CACHE
 
     services: list[str] = []
-    regions: set[str] = set()
-
-    # Fetch all known OTC services with a minimal limit
-    # We'll discover services by trying common ones + any found in the API response
-    known_services = [
-        "ecs",
-        "evs",
-        "obs",
-        "rds",
-        "dds",
-        "vpcep",
-        "nat",
-        "elb",
-        "lb",
-        "apig",
-        "dns",
-        "cce",
-        "cce-addon",
-        "bms",
-        "dms",
-        "dli",
-        "mlss",
-        "modelarts",
-        "iam",
-        "kms",
-        "ces",
-        "lts",
-        "aom",
-        "dws",
-        "gaussdb",
-        "ctsdb",
-        "dgraph",
-        "dis",
-        "mpc",
-        "ges",
-        "cts",
-        "smn",
-        "dcs",
-        "dcaas",
-        "dew",
-        "cse",
-    ]
-
     client = OTCPricingClient()
     try:
-        for service in known_services:
-            try:
-                response = client.get({"serviceName": service, "limitMax": "1"})
-                if response.result and isinstance(response.result, dict):
-                    if service in response.result and response.result[service]:
-                        services.append(service)
-                        # Extract regions from result
-                        for item in response.result[service]:
-                            if "region" in item:
-                                regions.add(item["region"])
-                elif response.result and isinstance(response.result, list):
-                    services.append(service)
-                    for item in response.result:
-                        if "region" in item:
-                            regions.add(item["region"])
-            except Exception:
-                continue
+        # Step 1: get total item count from a cheap probe.
+        probe = client.get({"limitMax": "1"})
+        total = probe.stats.count if probe.stats else 6000
+
+        # Step 2: fetch the full catalog so every service appears as a dict key.
+        response = client.get({"limitMax": str(total)})
+        if isinstance(response.result, dict):
+            services = sorted(k for k, v in response.result.items() if v)
+        elif isinstance(response.result, list):
+            seen: set[str] = set()
+            for item in response.result:
+                svc = item.get("serviceName", "")
+                if svc and svc not in seen:
+                    services.append(svc)
+                    seen.add(svc)
+            services = sorted(services)
+    except Exception:
+        pass
     finally:
         client.close()
 
     _SERVICES_CACHE = services
-    _REGIONS_CACHE = regions
-    return (services, regions)
+    return services
 
 
 def list_services() -> list[str]:
     """List all available services with pricing data.
 
     Returns:
-        List of service names (e.g., ['ecs', 'evs', 'obs']).
+        Sorted list of service names (e.g., ['ecs', 'evs', 'obs']).
     """
-    services, _ = _load_catalog()
-    return sorted(services)
+    return _load_catalog()
 
 
 def list_regions() -> list[str]:
-    """List all available regions.
+    """List all available OTC regions.
 
     Returns:
-        List of region codes (e.g., ['eu-de', 'eu-nl', 'eu-ch2']).
+        ['eu-ch2', 'eu-de', 'eu-nl']
     """
-    _, regions = _load_catalog()
-    return sorted(regions)
+    return _KNOWN_REGIONS
 
 
 def get_service_schema(service: str) -> dict[str, Any]:

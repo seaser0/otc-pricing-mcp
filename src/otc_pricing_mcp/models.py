@@ -86,7 +86,7 @@ class ApiResponse(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    cached_at: str = Field(alias="cachedAt")
+    cached_at: str | None = Field(alias="cachedAt", default=None)
     http_code: int = Field(alias="httpCode")
     url: str
     parameters: dict[str, Any]
@@ -94,7 +94,7 @@ class ApiResponse(BaseModel):
     message: str
     stats: ApiStats
     result: dict[str, list[dict[str, Any]]] | list[dict[str, Any]]
-    columns: dict[str, str]
+    columns: dict[str, str] = Field(default_factory=dict)
     filters: list[Any] = Field(default_factory=list)
     services: dict[str, Any] = Field(default_factory=dict)
     pagination: dict[str, Any] = Field(default_factory=dict)
