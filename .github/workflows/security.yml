@@ -90,7 +90,9 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: "HIGH,CRITICAL"
-          exit-code: 1  # Fail on HIGH/CRITICAL
+          # Skip CVEs without an upstream fix — see SECURITY.md.
+          ignore-unfixed: true
+          exit-code: 1  # Fail on HIGH/CRITICAL with a published fix
 
       - name: Upload Trivy results to GitHub Security
         if: always()

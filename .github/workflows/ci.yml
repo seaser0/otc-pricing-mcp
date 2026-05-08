@@ -158,6 +158,10 @@ jobs:
           image-ref: otc-pricing-mcp:scan
           format: table
           severity: HIGH,CRITICAL
+          # Skip CVEs without an upstream fix — pure noise from base-image
+          # distro packages we can't action. We still scan; we just don't
+          # fail on them. See SECURITY.md for the policy.
+          ignore-unfixed: true
           exit-code: 1
 
   # Summary job: ensure all checks pass
