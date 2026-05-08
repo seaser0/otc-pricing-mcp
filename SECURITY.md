@@ -105,7 +105,7 @@ We will:
 |------|-----------|----------|----------|
 | Dependency audit (pip-audit) | Every commit, nightly | CVE ≥ medium | `.github/workflows/security.yml` |
 | Static analysis (Bandit) | Every commit | HIGH severity | `.github/workflows/security.yml` |
-| Container image (Trivy) | Every commit | HIGH, CRITICAL | `.github/workflows/security.yml` |
+| Container image (Trivy) | Every commit | HIGH, CRITICAL with a published fix (`ignore-unfixed: true`) | `.github/workflows/security.yml` |
 | Type checking (mypy --strict) | Every commit | Type errors | Quality gate in CI |
 | Linting (ruff) | Every commit | Code style | Quality gate in CI |
 
