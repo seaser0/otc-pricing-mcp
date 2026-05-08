@@ -187,3 +187,46 @@ class TestCallToolRouting:
         with patch("otc_pricing_mcp.server.query_pricing", return_value=bad_result):
             result = self._invoke_full("query_pricing", {"services": ["ecs"]})
         assert result.isError is True
+
+    def test_search_otc_docs_routes(self) -> None:
+        """search_otc_docs is wired into call_tool (#5)."""
+        fake = {
+            "hits": [{"url": "x", "title": "y"}],
+            "query": "ecs",
+            "total_hits": 1,
+            "index_section_count": 100,
+        }
+        with patch("otc_pricing_mcp.server.search_otc_docs", return_value=fake):
+            result = self._invoke_full("search_otc_docs", {"query": "ecs"})
+        assert result.isError is False
+        assert json.loads(result.content[0].text) == fake
+
+    def test_get_otc_doc_section_routes(self) -> None:
+        """get_otc_doc_section is wired into call_tool (#5)."""
+        fake = {
+            "url": "u",
+            "title": "t",
+            "service": "s",
+            "cloud": "both",
+            "upstream_commit": "abc",
+            "sections": [{"h2": "", "h3": "", "anchor": "", "body": "x"}],
+            "matched": True,
+        }
+        with patch("otc_pricing_mcp.server.get_otc_doc_section", return_value=fake):
+            result = self._invoke_full("get_otc_doc_section", {"url": "u"})
+        assert result.isError is False
+
+    def test_get_otc_doc_section_unmatched_sets_isError(self) -> None:
+        """An unindexed URL surfaces as isError=true (#5 — no silent empties)."""
+        fake = {
+            "url": "u",
+            "title": "",
+            "service": "",
+            "cloud": "",
+            "upstream_commit": "",
+            "sections": [],
+            "matched": False,
+        }
+        with patch("otc_pricing_mcp.server.get_otc_doc_section", return_value=fake):
+            result = self._invoke_full("get_otc_doc_section", {"url": "u"})
+        assert result.isError is True

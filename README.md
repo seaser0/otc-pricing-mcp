@@ -22,7 +22,7 @@ Expose OTC pricing data to Claude and other LLM clients with full observability 
 | **STDIO** | Claude launches the server as a subprocess; communication is over stdin/stdout | Local Claude Desktop, CLI tools |
 | **SSE** | Server-Sent Events over HTTP — Claude connects to a URL | Remote/hosted deployments, web clients |
 
-This server gives Claude access to OTC pricing data through 7 specialized tools, on whichever transport you prefer.
+This server gives Claude access to OTC pricing data and the user-manual / API-reference documentation through 9 specialized tools, on whichever transport you prefer.
 
 ---
 
@@ -225,6 +225,39 @@ The server exposes **7 MCP tools** for different pricing queries:
 "Compare PAYG vs 12/24/36 month reserved pricing for ECS"
 ```
 
+### 8. `search_otc_docs`
+**Purpose**: Full-text search across the indexed OTC user manual and API reference
+
+**Input**:
+- `query` (string): Search terms (BM25-ranked, AND of tokens)
+- `scope` (string, optional): `public` | `swiss` | `both` (default: `both`)
+- `service` (string, optional): Restrict to one service repo (e.g. `elastic-cloud-server`)
+- `top_k` (integer, optional): 1-50, default 5
+
+**Output**: Ranked list of `{url, title, h2, h3, snippet, service, cloud, upstream_commit}` hits.
+The index ships with the package and is rebuilt weekly from the upstream
+`opentelekomcloud-docs/<service>` Sphinx/RST repos (Apache-2.0); the runtime
+never touches the Anubis-gated docs.otc.t-systems.com HTML.
+
+**Example Claude usage:**
+```
+"Find the OTC docs page that explains S3-flavor ECS specifications"
+```
+
+### 9. `get_otc_doc_section`
+**Purpose**: Fetch the body of one indexed documentation page (or one of its sections) as Markdown
+
+**Input**:
+- `url` (string): Canonical URL as returned by `search_otc_docs` (with or without `#anchor`)
+- `section` (string, optional): H2/H3 heading filter (case-insensitive substring)
+
+**Output**: `{url, title, sections: [{h2, h3, anchor, body}, ...], matched, ...}`
+
+**Example Claude usage:**
+```
+"Show me the EVS Disk Types and Performance section"
+```
+
 ---
 
 ## Configuration
@@ -237,7 +270,9 @@ Control the server behavior with environment variables:
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `METRICS_PORT` | `8080` | Port for metrics/health endpoints |
+| `METRICS_HOST` | `0.0.0.0` | Bind address for the HTTP server (set to `127.0.0.1` for non-container runs) |
 | `OTC_PRICING_API_BASE` | `https://calculator.otc-service.com/en/open-telekom-price-api/` | OTC API endpoint |
+| `OTC_DOCS_DB` | (auto) | Override path to the docs FTS5 index (default: bundled `data/otc_docs.sqlite3`) |
 
 **Example**:
 ```bash
