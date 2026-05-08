@@ -12,9 +12,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 # Context variable for storing request_id across async operations
-_request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "request_id", default=None
-)
+_request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
 
 
 def generate_request_id() -> str:

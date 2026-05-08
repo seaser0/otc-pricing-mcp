@@ -153,9 +153,9 @@ class OTCPricingClient:
                     observability.metrics.upstream_requests_total.labels(
                         service=service, status="success"
                     ).inc()
-                    observability.metrics.upstream_duration_seconds.labels(
-                        service=service
-                    ).observe(duration)
+                    observability.metrics.upstream_duration_seconds.labels(service=service).observe(
+                        duration
+                    )
 
                     logger.debug(
                         "upstream_request_success",
@@ -176,7 +176,9 @@ class OTCPricingClient:
                         service=service,
                         request_id=request_id,
                         error=str(e),
-                        status_code=getattr(e.response, "status_code", None) if hasattr(e, "response") else None,
+                        status_code=getattr(e.response, "status_code", None)
+                        if hasattr(e, "response")
+                        else None,
                         attempt=attempt_count,
                     )
                     raise
@@ -194,9 +196,7 @@ class OTCPricingClient:
 
         # Record error metrics
         duration = time.time() - start_time
-        observability.metrics.upstream_requests_total.labels(
-            service=service, status="error"
-        ).inc()
+        observability.metrics.upstream_requests_total.labels(service=service, status="error").inc()
         observability.metrics.upstream_duration_seconds.labels(service=service).observe(duration)
 
         logger.error(
