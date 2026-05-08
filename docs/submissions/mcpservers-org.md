@@ -13,7 +13,7 @@
 | **Name** | OTC Pricing MCP |
 | **Short description** | MCP server for the Open Telekom Cloud Price Calculator API |
 | **GitHub URL** | https://github.com/seaser0/otc-pricing-mcp |
-| **Hosted URL** | https://mcp-otc-pricing.nevit.ch/mcp |
+| **Hosted URL** | https://mcp-otc-pricing.example.com/mcp |
 | **Category** | Cloud / Infrastructure |
 | **Tags** | cloud, pricing, otc, open-telekom-cloud, cost-estimation, infrastructure |
 | **Language** | Python |

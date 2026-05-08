@@ -16,11 +16,11 @@ Use this content when submitting to PulseMCP (adapt to whatever form fields they
 | **Slug / ID** | `otc-pricing-mcp` |
 | **Description** | MCP server for the Open Telekom Cloud (OTC) Price Calculator API. Enables any MCP-compatible LLM client to query pricing data, find compute flavors, estimate monthly costs, and compare PAYG vs reserved billing across all three OTC regions (eu-de, eu-nl, eu-ch2). |
 | **Repository URL** | https://github.com/seaser0/otc-pricing-mcp |
-| **Author / Maintainer** | NEVIT (platform@nevit.ch) |
+| **Author / Maintainer** | seaser0 (s34s3r@gmail.com) |
 | **License** | Apache 2.0 |
 | **Language** | Python |
 | **Transport** | stdio (primary), HTTP (`/mcp`) |
-| **Hosted endpoint** | https://mcp-otc-pricing.nevit.ch/mcp |
+| **Hosted endpoint** | https://mcp-otc-pricing.example.com/mcp |
 | **Categories / Tags** | cloud, pricing, opentelekомcloud, otc, infrastructure, cost-estimation |
 | **Tools count** | 7 |
 | **Authentication required** | No — the OTC Price Calculator API is public |
@@ -51,7 +51,7 @@ Use this content when submitting to PulseMCP (adapt to whatever form fields they
 - Compare PAYG vs 12/24/36-month reserved billing with savings percentages
 - Covers eu-de (EUR), eu-nl (EUR), and eu-ch2 (CHF)
 
-**Production-ready:** containerized (distroless), Helm chart, ArgoCD GitOps, Prometheus metrics, structured JSON logs, health endpoints. Deployed at `mcp-otc-pricing.nevit.ch`.
+**Production-ready:** containerized (distroless), Helm chart, ArgoCD GitOps, Prometheus metrics, structured JSON logs, health endpoints.
 
 ---
 

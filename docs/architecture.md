@@ -4,7 +4,7 @@
 
 `otc-pricing-mcp` is a read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that wraps the Open Telekom Cloud (OTC) Price Calculator REST API. It enables any MCP-compatible LLM client (Claude Desktop, Claude Code, Cursor, etc.) to query OTC pricing data using natural language.
 
-The server is a **strict catalog wrapper** — no business logic, no markup, no vendor-specific assumptions. It exposes 7 MCP tools and is deployed to a NEVIT k3s cluster via ArgoCD.
+The server is a **strict catalog wrapper** — no business logic, no markup, no vendor-specific assumptions. It exposes 7 MCP tools and is deployed to a k3s cluster via ArgoCD.
 
 ---
 
@@ -258,7 +258,7 @@ Log level is controlled via the `LOG_LEVEL` environment variable (default: `INFO
 
 ## Deployment
 
-The server is deployed to NEVIT's k3s cluster via ArgoCD GitOps:
+The server is deployed via ArgoCD GitOps:
 
 ```
 GitHub repository (main branch)
@@ -275,7 +275,7 @@ Kubernetes namespace: mcp-otc-pricing
         │   └── Container: ghcr.io/<owner>/otc-pricing-mcp:latest
         ├── Service (ClusterIP :8080)
         ├── Ingress (TLS via cert-manager / Let's Encrypt)
-        │   └── https://mcp-otc-pricing.nevit.ch/
+        │   └── https://mcp-otc-pricing.example.com/
         ├── ServiceMonitor (Prometheus Operator scrape config)
         ├── NetworkPolicy (egress → OTC API only)
         └── PodDisruptionBudget (minAvailable: 1)

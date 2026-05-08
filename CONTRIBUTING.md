@@ -361,7 +361,7 @@ uv sync --reinstall
 
 ## Code of Conduct
 
-Please note that this project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to security@nevit.ch.
+Please note that this project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior via [GitHub Security Advisory](https://github.com/seaser0/otc-pricing-mcp/security/advisories/new).
 
 ## Getting Help
 
@@ -372,7 +372,7 @@ Please note that this project adheres to the [Contributor Covenant Code of Condu
   - What you expected
   - Your Python version and OS
   - Full error message/stack trace
-- **Security issue?** Email security@nevit.ch (do not open a public issue)
+- **Security issue?** [Create a private GitHub Security Advisory](https://github.com/seaser0/otc-pricing-mcp/security/advisories/new) (do not open a public issue)
 - **Want to discuss a large feature?** Start a [GitHub Discussion](https://github.com/seaser0/otc-pricing-mcp/discussions/new) first
 
 ## Additional Resources

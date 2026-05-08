@@ -111,7 +111,7 @@ kubectl get svc -n mcp-otc-pricing otc-pricing-mcp
 # Verify ingress
 kubectl get ingress -n mcp-otc-pricing otc-pricing-mcp
 
-# Expected: Ingress with hostname mcp-otc-pricing.nevit.ch
+# Expected: Ingress with hostname mcp-otc-pricing.example.com
 
 # Check TLS certificate status
 kubectl get certificate -n mcp-otc-pricing otc-pricing-mcp-tls
@@ -123,19 +123,19 @@ kubectl get certificate -n mcp-otc-pricing otc-pricing-mcp-tls
 
 ### Test Health Endpoints
 
-Health endpoints are available at `https://mcp-otc-pricing.nevit.ch/`:
+Health endpoints are available at `https://mcp-otc-pricing.example.com/`:
 
 ```bash
 # Liveness check (always returns 200 if pod is running)
-curl -I https://mcp-otc-pricing.nevit.ch/healthz
+curl -I https://mcp-otc-pricing.example.com/healthz
 # Expected: HTTP/2 200 OK
 
 # Readiness check (checks OTC API connectivity, cached 30s)
-curl https://mcp-otc-pricing.nevit.ch/readyz | jq .
+curl https://mcp-otc-pricing.example.com/readyz | jq .
 # Expected: {"status": "ready", "upstream": "ok", "api_response_time": 0.042}
 
 # If API is unreachable:
-curl -I https://mcp-otc-pricing.nevit.ch/readyz
+curl -I https://mcp-otc-pricing.example.com/readyz
 # Expected: HTTP/2 503 Service Unavailable
 ```
 
@@ -177,7 +177,7 @@ Verify that killing one pod doesn't break the service:
 kubectl delete pod -n mcp-otc-pricing -l app=otc-pricing-mcp --field-selector status.phase=Running -n mcp-otc-pricing | head -1
 
 # Immediately test that service still responds
-curl -I https://mcp-otc-pricing.nevit.ch/healthz
+curl -I https://mcp-otc-pricing.example.com/healthz
 
 # Expected: HTTP/2 200 (even though we just killed a pod)
 
@@ -413,7 +413,7 @@ argocd app get otc-pricing-mcp
 # Sync Status: Synced
 
 # ✅ HTTPS endpoint returns 200
-curl -I https://mcp-otc-pricing.nevit.ch/healthz
+curl -I https://mcp-otc-pricing.example.com/healthz
 # HTTP/2 200 OK
 
 # ✅ Pod logs show structured JSON
@@ -422,7 +422,7 @@ kubectl logs -n mcp-otc-pricing -l app=otc-pricing-mcp --tail=5 | jq .
 
 # ✅ HA: Service survives pod termination
 kubectl delete pod -n mcp-otc-pricing $(kubectl get pods -n mcp-otc-pricing -o name | head -1)
-curl -I https://mcp-otc-pricing.nevit.ch/healthz
+curl -I https://mcp-otc-pricing.example.com/healthz
 # HTTP/2 200 OK (from surviving pod)
 
 # ✅ NetworkPolicy blocks unauthorized egress
@@ -476,7 +476,7 @@ Prometheus metrics are available at `/metrics` endpoint:
 
 ```bash
 # Via ingress
-curl https://mcp-otc-pricing.nevit.ch/metrics | head -20
+curl https://mcp-otc-pricing.example.com/metrics | head -20
 
 # Via port-forward
 kubectl port-forward -n mcp-otc-pricing svc/otc-pricing-mcp 8080:8080

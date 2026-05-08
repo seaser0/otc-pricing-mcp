@@ -21,7 +21,7 @@
   "remotes": [
     {
       "transportType": "sse",
-      "url": "https://mcp-otc-pricing.nevit.ch/sse"
+      "url": "https://mcp-otc-pricing.example.com/sse"
     }
   ]
 }

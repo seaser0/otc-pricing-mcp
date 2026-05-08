@@ -18,8 +18,6 @@ Instead, please report security issues via:
 1. **GitHub Security Advisory (Recommended):** [Create private advisory](https://github.com/seaser0/otc-pricing-mcp/security/advisories/new)
    - Allows private disclosure and coordinated remediation
    - Visible only to maintainers until published
-
-2. **Email (for sensitive cases):** security@nevit.ch
    - Mark subject: `[SECURITY] OTC Pricing MCP`
    - Include reproduction steps and severity assessment
 
@@ -166,8 +164,8 @@ spec:
 
 ## Security Contact
 
-- **General questions**: security@nevit.ch
-- **Vulnerability reports**: Use GitHub Security Advisory (preferred)
+- **Vulnerability reports**: [GitHub Security Advisory](https://github.com/seaser0/otc-pricing-mcp/security/advisories/new) (preferred)
+- **General questions**: [GitHub Discussions](https://github.com/seaser0/otc-pricing-mcp/discussions)
 - **Issue tracker**: https://github.com/seaser0/otc-pricing-mcp/issues (for non-security issues only)
 
 ## References

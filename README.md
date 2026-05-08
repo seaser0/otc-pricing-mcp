@@ -89,7 +89,7 @@ Point any MCP client that supports SSE transport at the hosted endpoint:
 {
   "mcpServers": {
     "otc-pricing": {
-      "url": "https://mcp-otc-pricing.nevit.ch/sse"
+      "url": "https://mcp-otc-pricing.example.com/sse"
     }
   }
 }
@@ -479,9 +479,9 @@ docker run \
 
 See `deploy/kubernetes/` for the full manifest set (Deployment, Service, Ingress, NetworkPolicy, ServiceMonitor, PodDisruptionBudget).
 
-The server is deployed to `https://mcp-otc-pricing.nevit.ch` via ArgoCD. Connect remote clients to:
+When self-hosting on Kubernetes, connect remote clients to your ingress hostname:
 ```
-https://mcp-otc-pricing.nevit.ch/sse
+https://mcp-otc-pricing.example.com/sse
 ```
 
 Key features:
@@ -619,7 +619,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 Apache License 2.0 — see [LICENSE](LICENSE) file.
 
-**Copyright**: NEVIT (platform@nevit.ch)
+**Copyright**: seaser0 (s34s3r@gmail.com)
 
 ---
 
@@ -661,6 +661,6 @@ See [docs/](docs/) directory for detailed documentation:
 
 ---
 <!-- mcp-name: io.github.seaser0/otc-pricing-mcp -->
-**Built with ❤️ by NEVIT**
+**Built with ❤️ by seaser0**
 
 *Last updated: 2026-05-07*

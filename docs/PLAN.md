@@ -2,7 +2,7 @@
 
 ## Goal Summary
 
-Build an open-source Python MCP server that wraps the Open Telekom Cloud Price Calculator API, enabling LLM clients to query OTC pricing, explore services/regions, and compare billing models. The server is a strict catalog wrapper with no business logic, deployed to NEVIT's k3s cluster via ArgoCD, and published under Apache 2.0.
+Build an open-source Python MCP server that wraps the Open Telekom Cloud Price Calculator API, enabling LLM clients to query OTC pricing, explore services/regions, and compare billing models. The server is a strict catalog wrapper with no business logic, deployed to a k3s cluster via ArgoCD, and published under Apache 2.0.
 
 ## Understanding of the Scope
 
@@ -69,7 +69,7 @@ Build an open-source Python MCP server that wraps the Open Telekom Cloud Price C
 10. **Story 8**: Helm + ArgoCD
     - Helm chart in `deploy/helm/otc-pricing-mcp/`: Deployment, Service, Ingress, ServiceMonitor, NetworkPolicy, PDB
     - ArgoCD Application in `deploy/argocd/application.yaml`
-    - Coordinates with Mike on hostname, namespace, resource limits
+    - Coordinates on hostname, namespace, resource limits
 
 11. **Story 9 (Subagent with you review)**: Docs & publication
     - README (one-para what/why, quickstart, tool table, config reference)
@@ -82,13 +82,13 @@ Build an open-source Python MCP server that wraps the Open Telekom Cloud Price C
 **1 → 2 → 3 → 4 → 6 → 8 → 9** (sequential core, ~7.5 days)
 Stories **0, 5, 7** parallelize alongside the critical path.
 
-## Ambiguities & Clarifications Needed from Mike
+## Ambiguities & Clarifications Needed
 
 1. **Region filter syntax**: Story 0 will empirically determine whether `filterBy[region]=eu-ch2` (no bracket index) or another form is correct. The existing probe found `filterBy[region][0]=eu-ch2` returns 0 items.
 
 2. **GitHub repository location**: Is the repo `github.com/opentelekomcloud-community/otc-pricing-mcp` or another org? Need confirmation before pushing.
 
-3. **Hosted endpoint hostname**: The Epic mentions `mcp-otc-pricing.nevit.ch` as a placeholder. Confirm the final subdomain under `nevit.ch`.
+3. **Hosted endpoint hostname**: Confirm the final subdomain for your deployment.
 
 4. **Kubernetes namespace**: Should the deployment land in a specific namespace (e.g., `mcp-otc-pricing`)? Confirm resource limits and ingress class.
 
@@ -113,9 +113,9 @@ All stories must pass before merge to `main`:
 |---|---|
 | Upstream API breaks our assumptions | Pydantic `extra="allow"` + nightly live tests catch it within 24h. Fail loudly with actual response. |
 | Filter syntax differs from tested form | Story 0 owns this; empirical testing against live API + reference to official UI network calls. |
-| Ingress/networking conflicts in k3s | Dedicated subdomain + NetworkPolicy to restrict egress to OTC API only. Coordinates with Mike. |
+| Ingress/networking conflicts in k3s | Dedicated subdomain + NetworkPolicy to restrict egress to OTC API only. |
 | MCP spec changes | Pin SDK version; bump deliberately; communicate to consumers. |
 
 ---
 
-**Next Steps**: Await Mike's confirmation on the ambiguities above. Once confirmed, begin Phase A (dispatch Story 0 subagent + start skeleton in parallel).
+**Next Steps**: Confirm the ambiguities above, then begin Phase A (dispatch Story 0 subagent + start skeleton in parallel).

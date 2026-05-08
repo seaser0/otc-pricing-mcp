@@ -2,7 +2,7 @@
 
 **Verfasser:** optimus (Claude) für seaser
 **Datum:** 2026-05-08
-**Server unter Test:** `https://mcp-otc-pricing.nevit.ch` — `otc-pricing-mcp v1.27.0`
+**Server unter Test:** `https://mcp-otc-pricing.example.com` — `otc-pricing-mcp v1.27.0`
 
 ---
 

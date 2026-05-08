@@ -22,10 +22,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - mcp-otc-pricing.nevit.ch
+    - mcp-otc-pricing.example.com
     secretName: otc-pricing-mcp-tls
   rules:
-  - host: mcp-otc-pricing.nevit.ch
+  - host: mcp-otc-pricing.example.com
     http:
       paths:
       - path: /
