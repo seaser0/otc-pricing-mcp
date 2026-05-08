@@ -6,6 +6,8 @@ Includes comprehensive logging and metrics tracking for debugging and monitoring
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 from typing import Any
 
@@ -13,6 +15,9 @@ from mcp.server import Server
 from mcp.types import TextContent, Tool
 
 from . import observability
+from .tools.discovery import get_service_schema, list_regions, list_services
+from .tools.estimation import compare_billing_models, estimate_monthly_cost
+from .tools.pricing import find_compute_flavor, query_pricing
 
 logger = observability.get_logger(__name__)
 
@@ -172,19 +177,43 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     try:
         # Route to tool implementation
         if name == "list_services":
-            text = "Not yet implemented"
+            result = await asyncio.to_thread(list_services)
+            text = json.dumps(result, ensure_ascii=False)
         elif name == "list_regions":
-            text = "Not yet implemented"
+            result = await asyncio.to_thread(list_regions)
+            text = json.dumps(result, ensure_ascii=False)
         elif name == "get_service_schema":
-            text = "Not yet implemented"
+            service = arguments["service"]
+            result = await asyncio.to_thread(get_service_schema, service)
+            text = json.dumps(result, ensure_ascii=False)
         elif name == "query_pricing":
-            text = "Not yet implemented"
+            result = await asyncio.to_thread(
+                query_pricing,
+                arguments["services"],
+                arguments.get("region"),
+                arguments.get("max_results"),
+            )
+            text = json.dumps(result, ensure_ascii=False)
         elif name == "find_compute_flavor":
-            text = "Not yet implemented"
+            result = await asyncio.to_thread(
+                find_compute_flavor,
+                arguments["v_cpu"],
+                arguments["ram_gb"],
+                arguments.get("os"),
+                arguments.get("region", "eu-de"),
+            )
+            text = json.dumps(result, ensure_ascii=False)
         elif name == "estimate_monthly_cost":
-            text = "Not yet implemented"
+            result = await asyncio.to_thread(estimate_monthly_cost, arguments["items"])
+            text = json.dumps(result, ensure_ascii=False)
         elif name == "compare_billing_models":
-            text = "Not yet implemented"
+            result = await asyncio.to_thread(
+                compare_billing_models,
+                arguments["product_id"],
+                arguments.get("quantity", 1.0),
+                arguments.get("hours_per_month", 730.0),
+            )
+            text = json.dumps(result, ensure_ascii=False)
         else:
             text = f"Unknown tool: {name}"
             logger.warning("unknown_tool_requested", tool=name, request_id=request_id)
