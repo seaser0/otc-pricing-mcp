@@ -8,6 +8,24 @@ from typing import Any
 from otc_pricing_mcp.client import OTCPricingClient
 from otc_pricing_mcp.normalize import parse_price
 
+# Reserved-tier identifiers and their term lengths (months).
+_RESERVED_TIERS: tuple[tuple[str, int], ...] = (
+    ("reserved_12m", 12),
+    ("reserved_24m", 24),
+    ("reserved_36m", 36),
+)
+
+
+def _tier_unavailable(monthly: Decimal, upfront: Decimal) -> bool:
+    """Return True if a reserved tier is not offered for this product.
+
+    The OTC price-calculator returns 0.0 for both the monthly (Rxx) and the
+    upfront (RUxx) field when a term is not on offer for a given product —
+    indistinguishable from a real price unless we treat that combination as
+    'missing'. Documented in #7.
+    """
+    return monthly == 0 and upfront == 0
+
 
 def estimate_monthly_cost(
     items: list[dict[str, Any]],
@@ -27,12 +45,13 @@ def estimate_monthly_cost(
         Dictionary with structure:
         {
             'total_payg': float,
-            'total_reserved_12m': float,
-            'total_reserved_24m': float,
-            'total_reserved_36m': float,
-            'total_reserved_upfront_12m': float,
-            'total_reserved_upfront_24m': float,
-            'total_reserved_upfront_36m': float,
+            'total_reserved_12m': float | None,   # None if any item lacks the tier
+            'total_reserved_24m': float | None,
+            'total_reserved_36m': float | None,
+            'total_reserved_upfront_12m': float | None,
+            'total_reserved_upfront_24m': float | None,
+            'total_reserved_upfront_36m': float | None,
+            'tiers_unavailable': [str, ...],      # tiers that are None at the total
             'currency': str,
             'items': [
                 {
@@ -40,14 +59,23 @@ def estimate_monthly_cost(
                     'quantity': float,
                     'hours_per_month': float,
                     'payg': float,
-                    'reserved_12m': float,
-                    'reserved_24m': float,
-                    'reserved_36m': float,
+                    'reserved_12m': float | None,            # None if not offered
+                    'reserved_24m': float | None,
+                    'reserved_36m': float | None,
+                    'reserved_upfront_12m': float | None,
+                    'reserved_upfront_24m': float | None,
+                    'reserved_upfront_36m': float | None,
+                    'tiers_available': [str, ...],           # always includes 'payg'
                     'currency': str,
                 },
                 ...
             ]
         }
+
+    A reserved tier (12m / 24m / 36m) is considered 'not offered' when both
+    its monthly (Rxx) and upfront (RUxx) prices are 0.0 — see #7. The fields
+    are nulled rather than reported as 0.0 so a 100% savings recommendation
+    isn't synthesised on a non-existent tier.
 
     Examples:
         # Single resource, 1 unit, default hours
@@ -99,15 +127,13 @@ def estimate_monthly_cost(
 
     # Calculate costs
     item_results: list[dict[str, Any]] = []
-    totals: dict[str, Decimal] = {
-        "payg": Decimal("0"),
-        "reserved_12m": Decimal("0"),
-        "reserved_24m": Decimal("0"),
-        "reserved_36m": Decimal("0"),
-        "reserved_upfront_12m": Decimal("0"),
-        "reserved_upfront_24m": Decimal("0"),
-        "reserved_upfront_36m": Decimal("0"),
-    }
+    payg_total = Decimal("0")
+    # Per-tier accumulators: sum of items that DO offer the tier; counter of
+    # items that DON'T (so totals can be nulled when any item lacks the tier).
+    tier_totals: dict[str, Decimal] = {tier: Decimal("0") for tier, _ in _RESERVED_TIERS}
+    tier_upfront_totals: dict[str, Decimal] = {tier: Decimal("0") for tier, _ in _RESERVED_TIERS}
+    tier_unavailable_count: dict[str, int] = {tier: 0 for tier, _ in _RESERVED_TIERS}
+    n_priced_items = 0
     currency = "EUR"
 
     for item in items:
@@ -127,59 +153,71 @@ def estimate_monthly_cost(
         # Parse prices
         try:
             payg_amount, _ = parse_price(product.get("priceAmount", "0 EUR"))
-            r12_amount, _ = parse_price(product.get("R12", "0 EUR"))
-            r24_amount, _ = parse_price(product.get("R24", "0 EUR"))
-            r36_amount, _ = parse_price(product.get("R36", "0 EUR"))
-            ru12_amount, _ = parse_price(product.get("RU12", "0 EUR"))
-            ru24_amount, _ = parse_price(product.get("RU24", "0 EUR"))
-            ru36_amount, _ = parse_price(product.get("RU36", "0 EUR"))
+            tier_amounts: dict[str, Decimal] = {}
+            tier_upfront_amounts: dict[str, Decimal] = {}
+            tier_amounts["reserved_12m"], _ = parse_price(product.get("R12", "0 EUR"))
+            tier_amounts["reserved_24m"], _ = parse_price(product.get("R24", "0 EUR"))
+            tier_amounts["reserved_36m"], _ = parse_price(product.get("R36", "0 EUR"))
+            tier_upfront_amounts["reserved_12m"], _ = parse_price(product.get("RU12", "0 EUR"))
+            tier_upfront_amounts["reserved_24m"], _ = parse_price(product.get("RU24", "0 EUR"))
+            tier_upfront_amounts["reserved_36m"], _ = parse_price(product.get("RU36", "0 EUR"))
         except Exception:
             continue
 
-        # Calculate monthly costs
+        n_priced_items += 1
         payg_cost = payg_amount * hours * quantity
-        r12_cost = r12_amount * quantity
-        r24_cost = r24_amount * quantity
-        r36_cost = r36_amount * quantity
-        ru12_cost = ru12_amount * quantity
-        ru24_cost = ru24_amount * quantity
-        ru36_cost = ru36_amount * quantity
+        payg_total += payg_cost
 
-        item_results.append(
-            {
-                "id": product_id,
-                "quantity": float(quantity),
-                "hours_per_month": float(hours),
-                "payg": float(payg_cost),
-                "reserved_12m": float(r12_cost),
-                "reserved_24m": float(r24_cost),
-                "reserved_36m": float(r36_cost),
-                "reserved_upfront_12m": float(ru12_cost),
-                "reserved_upfront_24m": float(ru24_cost),
-                "reserved_upfront_36m": float(ru36_cost),
-                "currency": currency,
-            }
-        )
+        item_record: dict[str, Any] = {
+            "id": product_id,
+            "quantity": float(quantity),
+            "hours_per_month": float(hours),
+            "payg": float(payg_cost),
+            "currency": currency,
+        }
+        tiers_available_for_item: list[str] = ["payg"]
 
-        totals["payg"] += payg_cost
-        totals["reserved_12m"] += r12_cost
-        totals["reserved_24m"] += r24_cost
-        totals["reserved_36m"] += r36_cost
-        totals["reserved_upfront_12m"] += ru12_cost
-        totals["reserved_upfront_24m"] += ru24_cost
-        totals["reserved_upfront_36m"] += ru36_cost
+        for tier, _months in _RESERVED_TIERS:
+            monthly_amt = tier_amounts[tier]
+            upfront_amt = tier_upfront_amounts[tier]
+            upfront_key = f"reserved_upfront_{tier.split('_')[1]}"
 
-    return {
-        "total_payg": float(totals["payg"]),
-        "total_reserved_12m": float(totals["reserved_12m"]),
-        "total_reserved_24m": float(totals["reserved_24m"]),
-        "total_reserved_36m": float(totals["reserved_36m"]),
-        "total_reserved_upfront_12m": float(totals["reserved_upfront_12m"]),
-        "total_reserved_upfront_24m": float(totals["reserved_upfront_24m"]),
-        "total_reserved_upfront_36m": float(totals["reserved_upfront_36m"]),
+            if _tier_unavailable(monthly_amt, upfront_amt):
+                item_record[tier] = None
+                item_record[upfront_key] = None
+                tier_unavailable_count[tier] += 1
+            else:
+                monthly_cost = monthly_amt * quantity
+                upfront_cost = upfront_amt * quantity
+                item_record[tier] = float(monthly_cost)
+                item_record[upfront_key] = float(upfront_cost)
+                tier_totals[tier] += monthly_cost
+                tier_upfront_totals[tier] += upfront_cost
+                tiers_available_for_item.append(tier)
+
+        item_record["tiers_available"] = tiers_available_for_item
+        item_results.append(item_record)
+
+    # A tier total is None when at least one priced item lacks that tier —
+    # mixing apples and pears into a single 'total' would be misleading.
+    result: dict[str, Any] = {
+        "total_payg": float(payg_total),
         "currency": currency,
-        "items": item_results,
     }
+    tiers_unavailable: list[str] = []
+    for tier, _months in _RESERVED_TIERS:
+        upfront_key = f"reserved_upfront_{tier.split('_')[1]}"
+        if n_priced_items > 0 and tier_unavailable_count[tier] == 0:
+            result[f"total_{tier}"] = float(tier_totals[tier])
+            result[f"total_{upfront_key}"] = float(tier_upfront_totals[tier])
+        else:
+            result[f"total_{tier}"] = None
+            result[f"total_{upfront_key}"] = None
+            tiers_unavailable.append(tier)
+
+    result["tiers_unavailable"] = tiers_unavailable
+    result["items"] = item_results
+    return result
 
 
 def compare_billing_models(
@@ -202,24 +240,27 @@ def compare_billing_models(
         {
             'product_id': str,
             'currency': str,
+            'quantity': float,
+            'hours_per_month': float,
+            'tiers_available': [str, ...],   # always includes 'payg'
             'payg': {
                 'monthly_cost': float,
                 'hourly_rate': float,
             },
-            'reserved_12m': {
-                'monthly_cost': float,
-                'upfront_cost': float,
-                'total_cost': float,
-                'monthly_equivalent': float,
-            },
+            # Each reserved tier is either:
+            #   {'available': False}                       (tier not offered)
+            # or:
+            #   {'available': True, 'monthly_cost': ..., 'upfront_cost': ...,
+            #    'total_cost': ..., 'monthly_equivalent': ...,
+            #    'savings_percent': ...}                   (tier is on offer)
+            'reserved_12m': {...},
             'reserved_24m': {...},
             'reserved_36m': {...},
-            'savings': {
-                '12m': float (percent),
-                '24m': float (percent),
-                '36m': float (percent),
-            }
         }
+
+    A reserved tier is treated as not offered when both Rxx and RUxx are 0.0
+    in the upstream payload — without this distinction the tool was reporting
+    100% savings on tiers that don't exist (#7).
 
     Examples:
         # Compare billing for single unit
@@ -245,21 +286,23 @@ def compare_billing_models(
     currency = item["currency"]
 
     payg_monthly = item["payg"]
-    payg_hourly = payg_monthly / hours_per_month
+    payg_hourly = payg_monthly / hours_per_month if hours_per_month > 0 else 0.0
 
-    # Calculate reserved options (monthly + upfront)
-    def calc_reserved(monthly: float, upfront: float, months: int) -> dict[str, float]:
+    def calc_reserved(monthly: float | None, upfront: float | None, months: int) -> dict[str, Any]:
+        if monthly is None or upfront is None:
+            return {"available": False}
         total = monthly * months + upfront
         monthly_equivalent = total / months
         savings = (
             ((payg_monthly - monthly_equivalent) / payg_monthly * 100) if payg_monthly > 0 else 0
         )
         return {
+            "available": True,
             "monthly_cost": monthly,
             "upfront_cost": upfront,
             "total_cost": total,
             "monthly_equivalent": monthly_equivalent,
-            "savings_percent": max(0, savings),  # Negative savings should be 0
+            "savings_percent": max(0.0, savings),  # Negative savings clamped to 0
         }
 
     return {
@@ -267,23 +310,12 @@ def compare_billing_models(
         "currency": currency,
         "quantity": quantity,
         "hours_per_month": hours_per_month,
+        "tiers_available": list(item["tiers_available"]),
         "payg": {
             "monthly_cost": payg_monthly,
             "hourly_rate": payg_hourly,
         },
-        "reserved_12m": calc_reserved(
-            item["reserved_12m"],
-            item["reserved_upfront_12m"],
-            12,
-        ),
-        "reserved_24m": calc_reserved(
-            item["reserved_24m"],
-            item["reserved_upfront_24m"],
-            24,
-        ),
-        "reserved_36m": calc_reserved(
-            item["reserved_36m"],
-            item["reserved_upfront_36m"],
-            36,
-        ),
+        "reserved_12m": calc_reserved(item["reserved_12m"], item["reserved_upfront_12m"], 12),
+        "reserved_24m": calc_reserved(item["reserved_24m"], item["reserved_upfront_24m"], 24),
+        "reserved_36m": calc_reserved(item["reserved_36m"], item["reserved_upfront_36m"], 36),
     }

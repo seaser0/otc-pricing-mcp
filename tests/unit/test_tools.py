@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
+from otc_pricing_mcp.tools import estimation as estimation_module
 from otc_pricing_mcp.tools import pricing as pricing_module
 from otc_pricing_mcp.tools.discovery import get_service_schema, list_regions, list_services
 from otc_pricing_mcp.tools.estimation import compare_billing_models, estimate_monthly_cost
@@ -273,12 +276,134 @@ class TestCompareBillingModels:
             pass
 
     def test_compare_reserved_savings(self) -> None:
-        """compare_billing_models calculates savings correctly."""
+        """compare_billing_models reports savings_percent only on offered tiers (#7)."""
         try:
             result = compare_billing_models("OTC_S3M1_LI")
-            # Reserved should show savings_percent
-            assert "savings_percent" in result.get("reserved_12m", {})
-            assert "savings_percent" in result.get("reserved_24m", {})
-            assert "savings_percent" in result.get("reserved_36m", {})
+            # Each reserved tier is either {available: False} (no savings_percent)
+            # or {available: True, ..., savings_percent: ...}.
+            for tier in ("reserved_12m", "reserved_24m", "reserved_36m"):
+                tier_payload = result.get(tier, {})
+                assert "available" in tier_payload, f"{tier} must report availability"
+                if tier_payload["available"]:
+                    assert "savings_percent" in tier_payload
+                    # Savings must never exceed 100% on a real tier.
+                    assert 0.0 <= tier_payload["savings_percent"] <= 100.0
+                else:
+                    # Unavailable tiers must NOT include the misleading 100% number (#7).
+                    assert "savings_percent" not in tier_payload
+                    assert "monthly_cost" not in tier_payload
         except ValueError:
             pass
+
+
+def _stub_product_data(monkeypatch: pytest.MonkeyPatch, product: dict[str, str]) -> None:
+    """Make estimation tools see exactly one upstream product, deterministically.
+
+    Patches the OTCPricingClient instance produced inside estimation.py so the
+    test never hits the network. The fake response carries `product` under a
+    single service key.
+    """
+
+    class _FakeResponse:
+        result = {"ecs": [product]}
+
+    class _FakeClient:
+        def __init__(self) -> None:  # noqa: D401 - test stub
+            pass
+
+        def get(self, params: dict) -> Any:  # noqa: D401 - test stub
+            return _FakeResponse()
+
+        def close(self) -> None:  # noqa: D401 - test stub
+            pass
+
+    monkeypatch.setattr(estimation_module, "OTCPricingClient", _FakeClient)
+
+
+class TestReservedTierAvailability:
+    """Issue #7 — distinguish 'tier not offered' from 'tier costs €0.0'."""
+
+    _FULL_PRODUCT = {
+        "id": "OTC_FAKE",
+        "currency": "EUR",
+        "priceAmount": "0.10 EUR",
+        "R12": "60.00 EUR",
+        "R24": "50.00 EUR",
+        "R36": "40.00 EUR",
+        "RU12": "100.00 EUR",
+        "RU24": "200.00 EUR",
+        "RU36": "300.00 EUR",
+    }
+
+    _NO_36M = {
+        "id": "OTC_FAKE",
+        "currency": "EUR",
+        "priceAmount": "0.10 EUR",
+        "R12": "60.00 EUR",
+        "R24": "50.00 EUR",
+        "R36": "0.00 EUR",
+        "RU12": "100.00 EUR",
+        "RU24": "200.00 EUR",
+        "RU36": "0.00 EUR",
+    }
+
+    def test_estimate_zero_reserved_tier_is_nulled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When R36 == RU36 == 0.0, both per-item and total are None, not 0.0."""
+        _stub_product_data(monkeypatch, self._NO_36M)
+        result = estimate_monthly_cost([{"id": "OTC_FAKE"}])
+
+        assert result["items"][0]["reserved_12m"] is not None
+        assert result["items"][0]["reserved_36m"] is None
+        assert result["items"][0]["reserved_upfront_36m"] is None
+        assert "reserved_36m" not in result["items"][0]["tiers_available"]
+
+        # Total is None because the (only) item lacks the tier.
+        assert result["total_reserved_36m"] is None
+        assert result["total_reserved_upfront_36m"] is None
+        assert result["total_reserved_12m"] is not None
+        assert "reserved_36m" in result["tiers_unavailable"]
+        assert "reserved_12m" not in result["tiers_unavailable"]
+
+    def test_estimate_full_product_keeps_all_tiers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A product with all reserved tiers offered reports floats everywhere."""
+        _stub_product_data(monkeypatch, self._FULL_PRODUCT)
+        result = estimate_monthly_cost([{"id": "OTC_FAKE"}])
+
+        for tier in ("reserved_12m", "reserved_24m", "reserved_36m"):
+            assert result[f"total_{tier}"] is not None
+            assert result["items"][0][tier] is not None
+        assert result["tiers_unavailable"] == []
+        assert set(result["items"][0]["tiers_available"]) == {
+            "payg",
+            "reserved_12m",
+            "reserved_24m",
+            "reserved_36m",
+        }
+
+    def test_compare_billing_zero_reserved_marks_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """compare_billing_models reports {available:false} instead of 100% savings (#7)."""
+        _stub_product_data(monkeypatch, self._NO_36M)
+        result = compare_billing_models("OTC_FAKE")
+
+        assert result["reserved_36m"] == {"available": False}
+        # The other tiers stay populated and are never 100% savings on real data.
+        for tier in ("reserved_12m", "reserved_24m"):
+            assert result[tier]["available"] is True
+            assert "savings_percent" in result[tier]
+            assert result[tier]["savings_percent"] < 100.0
+
+        assert "reserved_36m" not in result["tiers_available"]
+        assert "reserved_12m" in result["tiers_available"]
+
+    def test_compare_billing_all_offered_includes_savings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When every tier is offered, savings_percent appears for each."""
+        _stub_product_data(monkeypatch, self._FULL_PRODUCT)
+        result = compare_billing_models("OTC_FAKE")
+
+        for tier in ("reserved_12m", "reserved_24m", "reserved_36m"):
+            assert result[tier]["available"] is True
+            assert "savings_percent" in result[tier]
