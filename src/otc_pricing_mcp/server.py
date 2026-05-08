@@ -157,9 +157,24 @@ async def list_tools() -> list[Tool]:
     return tools
 
 
+def _ok(text: str) -> CallToolResult:
+    """Wrap a successful tool result as a CallToolResult with isError=false."""
+    return CallToolResult(content=[TextContent(type="text", text=text)], isError=False)
+
+
+def _err(text: str) -> CallToolResult:
+    """Wrap a failed tool result as a CallToolResult with isError=true."""
+    return CallToolResult(content=[TextContent(type="text", text=text)], isError=True)
+
+
 @server.call_tool()  # type: ignore[untyped-decorator]
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] | CallToolResult:
-    """Route tool calls to their implementations with logging and metrics."""
+async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
+    """Route tool calls to their implementations with logging and metrics.
+
+    Always returns a CallToolResult so callers (the MCP SDK and tests alike)
+    see a single, consistent envelope. isError=true is reserved for upstream
+    failures and uncaught exceptions; everything else returns isError=false.
+    """
     # Generate request ID for this tool invocation if not already set
     request_id = observability.get_request_id()
     if request_id is None:
@@ -174,6 +189,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] |
         arguments=arguments,
     )
 
+    # Annotate as Any so mypy does not pin the type to the first branch's
+    # return value (list[str] from list_services); the actual shape varies
+    # per tool and json.dumps handles all of them.
+    result: Any
     try:
         # Route to tool implementation
         if name == "list_services":
@@ -199,12 +218,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] |
                 duration = time.time() - start_time
                 observability.metrics.requests_total.labels(tool=name, status="error").inc()
                 observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
-                logger.warning("tool_invocation_upstream_error", tool=name,
-                               request_id=request_id, warnings=warnings,
-                               duration_seconds=duration)
-                return CallToolResult(
-                    content=[TextContent(type="text", text=text)], isError=True
+                logger.warning(
+                    "tool_invocation_upstream_error",
+                    tool=name,
+                    request_id=request_id,
+                    warnings=warnings,
+                    duration_seconds=duration,
                 )
+                return _err(text)
         elif name == "find_compute_flavor":
             result = await asyncio.to_thread(
                 find_compute_flavor,
@@ -219,12 +240,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] |
                 duration = time.time() - start_time
                 observability.metrics.requests_total.labels(tool=name, status="error").inc()
                 observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
-                logger.warning("tool_invocation_upstream_error", tool=name,
-                               request_id=request_id, warnings=warnings,
-                               duration_seconds=duration)
-                return CallToolResult(
-                    content=[TextContent(type="text", text=text)], isError=True
+                logger.warning(
+                    "tool_invocation_upstream_error",
+                    tool=name,
+                    request_id=request_id,
+                    warnings=warnings,
+                    duration_seconds=duration,
                 )
+                return _err(text)
         elif name == "estimate_monthly_cost":
             result = await asyncio.to_thread(estimate_monthly_cost, arguments["items"])
             text = json.dumps(result, ensure_ascii=False)
@@ -242,7 +265,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] |
             observability.metrics.requests_total.labels(tool=name, status="error").inc()
             duration = time.time() - start_time
             observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
-            return [TextContent(type="text", text=text)]
+            return _err(text)
 
         # Record success metrics
         duration = time.time() - start_time
@@ -256,7 +279,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] |
             duration_seconds=duration,
         )
 
-        return [TextContent(type="text", text=text)]
+        return _ok(text)
 
     except Exception as e:
         # Record error metrics
@@ -274,7 +297,4 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] |
             exc_info=True,
         )
 
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Error executing tool '{name}': {str(e)}")],
-            isError=True,
-        )
+        return _err(f"Error executing tool '{name}': {e!s}")
