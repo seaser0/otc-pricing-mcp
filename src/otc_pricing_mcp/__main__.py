@@ -31,12 +31,16 @@ async def main() -> int:
     """Run the MCP server with STDIO and SSE transports concurrently."""
     try:
         port = int(os.getenv("METRICS_PORT", "8080"))
+        # Default 0.0.0.0 so the container can be reached from outside the pod
+        # (k8s service exposure, /healthz, /readyz, /metrics). Override with
+        # METRICS_HOST=127.0.0.1 to lock down to loopback in non-container runs.
+        host = os.getenv("METRICS_HOST", "0.0.0.0")  # nosec B104 — see comment above
 
         # Build Starlette app: SSE transport + health/metrics routes
         app = http_server.create_app(server)
         config = uvicorn.Config(
             app,
-            host="0.0.0.0",
+            host=host,
             port=port,
             log_config=None,   # don't override our structlog setup
             access_log=False,  # silence uvicorn access logs (structlog handles this)
