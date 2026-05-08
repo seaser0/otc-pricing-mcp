@@ -25,6 +25,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
+
       - name: Run pip-audit
         run: |
           echo "Running pip-audit to check for known CVEs..."
@@ -50,6 +53,9 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
 
       - name: Run Bandit
         run: |

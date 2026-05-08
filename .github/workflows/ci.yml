@@ -19,6 +19,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
+
       - name: Check code style
         run: |
           echo "Checking code style with ruff..."
@@ -41,6 +44,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
+
       - name: Check types
         run: |
           echo "Type checking source code with mypy --strict..."
@@ -57,6 +63,9 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
 
       - name: Run unit tests
         run: |
@@ -83,6 +92,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
+
       - name: Run conformance tests
         run: |
           echo "Running MCP conformance tests..."
@@ -100,6 +112,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
+
       - name: Run Bandit
         run: |
           echo "Running Bandit for security issues..."
@@ -116,6 +131,9 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+
+      - name: Install dependencies (with dev extras)
+        run: uv sync --extra dev
 
       - name: Run pip-audit
         run: |
