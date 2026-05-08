@@ -153,11 +153,8 @@ def find_compute_flavor(
     ram_gb: float,
     os: str | None = None,
     region: str = "eu-de",
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Find compute (ECS) instances matching vCPU/RAM/OS criteria.
-
-    This is a convenience wrapper around query_pricing specifically for ECS instances.
-    Searches for instances matching the requested vCPU and RAM specifications.
 
     Args:
         v_cpu: Virtual CPUs (e.g., 1, 2, 4, 8, 16).
@@ -167,49 +164,34 @@ def find_compute_flavor(
         region: Region (default: 'eu-de'). Options: 'eu-de', 'eu-nl', 'eu-ch2'.
 
     Returns:
-        List of matching compute flavor records, each with pricing and specs.
-        Empty list if no matches found.
-
-    Examples:
-        # Find 4-core, 8GB Linux instances in eu-de
-        >>> find_compute_flavor(v_cpu=4, ram_gb=8, os='Linux', region='eu-de')
-
-        # Find all 2-core, 4GB instances (any OS) in eu-nl
-        >>> find_compute_flavor(v_cpu=2, ram_gb=4, region='eu-nl')
+        {'matches': [<flavor records>], 'warnings': [<upstream error strings>]}
     """
-    result = query_pricing(
-        ["ecs"],
-        region=region,
-        max_results=5000,
-    )
+    result = query_pricing(["ecs"], region=region, max_results=5000)
+    upstream_warnings: list[str] = list(result.get("warnings", []))
 
     matches: list[dict[str, Any]] = []
     for item_dict in result.get("services", {}).get("ecs", []):
-        # Parse vCpu and ram fields
-        v_cpu_str = item_dict.get("vCpu", "").strip()
-        ram_str = item_dict.get("ram", "").strip()
+        v_cpu_str = str(item_dict.get("v_cpu", "")).strip()
+        ram_str = str(item_dict.get("ram", "")).strip()
 
         try:
             v_cpu_actual = int(v_cpu_str)
         except ValueError:
             continue
 
-        # Parse RAM (e.g., "8 GiB" → 8)
         try:
             ram_actual = float(ram_str.split()[0])
         except (ValueError, IndexError):
             continue
 
-        # Match vCPU and RAM
         if v_cpu_actual != v_cpu or abs(ram_actual - ram_gb) > 0.01:
             continue
 
-        # Match OS if specified
         if os:
-            os_unit = item_dict.get("osUnit", "").strip()
+            os_unit = str(item_dict.get("os_unit", "")).strip()
             if os.lower() not in os_unit.lower():
                 continue
 
         matches.append(item_dict)
 
-    return matches
+    return {"matches": matches, "warnings": upstream_warnings}

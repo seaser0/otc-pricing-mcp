@@ -12,7 +12,7 @@ import time
 from typing import Any
 
 from mcp.server import Server
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
 from . import observability
 from .tools.discovery import get_service_schema, list_regions, list_services
@@ -87,7 +87,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="find_compute_flavor",
-            description="Find compute (ECS) instances matching vCPU/RAM/OS criteria.",
+            description="Find compute (ECS) instances matching vCPU/RAM/OS criteria. Returns {matches: [...], warnings: [...]}.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -158,7 +158,7 @@ async def list_tools() -> list[Tool]:
 
 
 @server.call_tool()  # type: ignore[untyped-decorator]
-async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent] | CallToolResult:
     """Route tool calls to their implementations with logging and metrics."""
     # Generate request ID for this tool invocation if not already set
     request_id = observability.get_request_id()
@@ -194,6 +194,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("max_results"),
             )
             text = json.dumps(result, ensure_ascii=False)
+            warnings = result.get("warnings", [])
+            if warnings and result.get("total_items", 0) == 0:
+                duration = time.time() - start_time
+                observability.metrics.requests_total.labels(tool=name, status="error").inc()
+                observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+                logger.warning("tool_invocation_upstream_error", tool=name,
+                               request_id=request_id, warnings=warnings,
+                               duration_seconds=duration)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=text)], isError=True
+                )
         elif name == "find_compute_flavor":
             result = await asyncio.to_thread(
                 find_compute_flavor,
@@ -203,6 +214,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 arguments.get("region", "eu-de"),
             )
             text = json.dumps(result, ensure_ascii=False)
+            warnings = result.get("warnings", [])
+            if warnings and not result.get("matches"):
+                duration = time.time() - start_time
+                observability.metrics.requests_total.labels(tool=name, status="error").inc()
+                observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+                logger.warning("tool_invocation_upstream_error", tool=name,
+                               request_id=request_id, warnings=warnings,
+                               duration_seconds=duration)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=text)], isError=True
+                )
         elif name == "estimate_monthly_cost":
             result = await asyncio.to_thread(estimate_monthly_cost, arguments["items"])
             text = json.dumps(result, ensure_ascii=False)
@@ -252,9 +274,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             exc_info=True,
         )
 
-        return [
-            TextContent(
-                type="text",
-                text=f"Error executing tool '{name}': {str(e)}",
-            )
-        ]
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Error executing tool '{name}': {str(e)}")],
+            isError=True,
+        )
