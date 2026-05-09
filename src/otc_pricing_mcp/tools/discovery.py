@@ -87,23 +87,62 @@ def get_service_schema(service: str) -> dict[str, Any]:
             'service': str,
             'columns': {column_name: column_label, ...},
             'filterable_columns': [str, ...],
-            'returnable_columns': [str, ...]
+            'returnable_columns': [str, ...],
+            'actually_used_columns': [str, ...]  # columns with real values in a sample row
         }
 
+    Note:
+        The upstream OTC API returns a global column list (the union of all
+        service schemas), not a per-service projection. 'actually_used_columns'
+        is derived by sampling one real row and retaining only columns that carry
+        a non-empty value for this service — making it a practical filter guide.
+
     Raises:
-        ValueError: If service not found.
+        ValueError: If service is empty or not found in the catalog.
     """
+    # Issue #35: reject empty/blank service names before touching the network.
+    if not service or not service.strip():
+        raise ValueError("service is required and must be non-empty")
+
+    # Issue #35/#34: validate against catalog so unknown services yield a clear
+    # domain error instead of a 500 that leaks the upstream URL.
+    known = _load_catalog()
+    if known and service not in known:
+        hint = ", ".join(known[:20])
+        raise ValueError(
+            f"Service {service!r} not found in catalog. "
+            f"Known (first 20): [{hint}]. Use list_services() for the full list."
+        )
+
     client = OTCPricingClient()
     try:
         response = client.get({"serviceName": service, "limitMax": "1"})
         if not response.columns:
             raise ValueError(f"Service '{service}' not found or has no columns")
 
+        # Issue #37: determine which columns are actually populated for this
+        # service by inspecting the first sample row.
+        actually_used: list[str] = []
+        raw_rows: list[dict[str, Any]] = []
+        if isinstance(response.result, dict):
+            raw_rows = response.result.get(service, [])
+        elif isinstance(response.result, list):
+            raw_rows = response.result
+
+        if raw_rows:
+            row = raw_rows[0]
+            actually_used = sorted(
+                col
+                for col in response.columns
+                if str(row.get(col, "")).strip() not in ("", "-", "N/A")
+            )
+
         return {
             "service": service,
             "columns": response.columns,
             "filterable_columns": sorted(response.columns.keys()),
             "returnable_columns": sorted(response.columns.keys()),
+            "actually_used_columns": actually_used,
         }
     finally:
         client.close()
