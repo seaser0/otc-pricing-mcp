@@ -5,9 +5,12 @@ Read-only SQLite FTS5 lookups against an index built offline by
 repos. The index ships with the package; the runtime never touches the
 docs.otc.t-systems.com HTML site (Anubis-gated + robots-disallowed).
 
-If the index file is missing the tools surface a clear error rather than
-silently returning empty results — the same anti-pattern issues #4 / #6
-caught for the pricing tools.
+Boundary validation is strict: empty/whitespace inputs, out-of-range
+`top_k`, unknown services, and URLs that don't look like absolute OTC docs
+URLs all raise ValueError so the MCP layer can surface ``isError=true``.
+This is the pattern issues #4 / #6 / #31 / #33 / #35 / #41-#45 caught for
+the pricing tools — silent-zero / silent-clamp / silent-empty are bugs,
+not features.
 """
 
 from __future__ import annotations
@@ -25,6 +28,13 @@ _BM25_WEIGHTS = (10.0, 5.0, 5.0, 1.0)  # title, h2, h3, body
 
 _DB_PATH_ENV = "OTC_DOCS_DB"
 
+_TOP_K_MAX = 50
+
+# Cache the indexed-service list so service-filter validation doesn't pay
+# the SQLite round-trip on every call. Built lazily on the first call that
+# needs it; reset via _reset_service_cache() in tests.
+_SERVICE_CACHE: frozenset[str] | None = None
+
 
 def _resolve_db_path() -> Path:
     """Find the SQLite index file.
@@ -41,13 +51,10 @@ def _resolve_db_path() -> Path:
     if override:
         return Path(override)
 
-    # `__file__` lives at  .../otc_pricing_mcp/tools/docs.py
-    # In an installed wheel:  .../otc_pricing_mcp/data/otc_docs.sqlite3
     bundled = Path(__file__).resolve().parent.parent / "data" / "otc_docs.sqlite3"
     if bundled.exists():
         return bundled
 
-    # Repo checkout: walk upwards looking for data/otc_docs.sqlite3.
     here = Path(__file__).resolve()
     for parent in here.parents:
         candidate = parent / "data" / "otc_docs.sqlite3"
@@ -70,6 +77,21 @@ def _open_db() -> sqlite3.Connection:
     return con
 
 
+def _reset_service_cache() -> None:
+    """Test hook: drop the cached service list so a new fixture is picked up."""
+    global _SERVICE_CACHE
+    _SERVICE_CACHE = None
+
+
+def _indexed_services() -> frozenset[str]:
+    global _SERVICE_CACHE
+    if _SERVICE_CACHE is None:
+        with closing(_open_db()) as con:
+            rows = con.execute("SELECT DISTINCT service FROM docs").fetchall()
+        _SERVICE_CACHE = frozenset(r[0] for r in rows if r[0])
+    return _SERVICE_CACHE
+
+
 def _escape_match(query: str) -> str:
     """Quote each FTS5 token so user input can't break out of the MATCH grammar.
 
@@ -79,16 +101,24 @@ def _escape_match(query: str) -> str:
     token in double quotes (FTS5 phrase quoting). Embedded `"` are doubled
     per the FTS5 grammar.
     """
-    tokens = [t for t in query.split() if t.strip()]
+    tokens = query.split()
     if not tokens:
         return '""'
     quoted: list[str] = []
     for tok in tokens:
-        # Drop FTS5 syntax characters that would cause a syntax error even
-        # inside a phrase — `"` is the only one.
         safe = tok.replace('"', '""')
         quoted.append(f'"{safe}"')
     return " ".join(quoted)
+
+
+def _escape_like(pattern: str) -> str:
+    """Escape SQL LIKE wildcards so user input doesn't expand the pattern.
+
+    Pair with ``ESCAPE '\\'`` in the SQL. Without this, a URL containing
+    ``%`` matches every row and ``_`` matches arbitrary single characters
+    (issue #40).
+    """
+    return pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def search_otc_docs(
@@ -101,41 +131,52 @@ def search_otc_docs(
 
     Args:
         query: Free-form search terms (BM25-ranked, AND-of-tokens semantics).
+               Must contain at least one non-whitespace character.
         scope: "public" = Public OTC (eu-de/eu-nl), "swiss" = Swiss OTC
                (eu-ch2), "both" = no filter. Defaults to "both" since most
                umn pages apply to both clouds.
         service: Optional service repo name (e.g. "elastic-cloud-server")
-                 to constrain results. None = all services.
-        top_k: Number of hits to return (clamped to [1, 50]).
+                 to constrain results. Must match a service actually indexed.
+                 None = all services.
+        top_k: Number of hits to return. Must be in [1, 50]; values > 50
+               are accepted but clamped to 50 with a note in the response.
 
     Returns:
-        {
-            'hits': [
-                {
-                    'url': str,             # canonical docs.otc URL with anchor
-                    'title': str,           # page H1
-                    'h2': str,              # section H2 ('' if before first H2)
-                    'h3': str,
-                    'service': str,         # opentelekomcloud-docs repo name
-                    'cloud': str,           # 'public-otc' / 'swiss-otc' / 'both'
-                    'upstream_commit': str, # SHA of the RST source
-                    'snippet': str,         # body excerpt with <b>...</b> matches
-                    'rank': float,          # BM25 score (more negative = better)
-                },
-                ...
-            ],
-            'query': str,
-            'total_hits': int,   # results.length (capped at top_k)
-            'index_section_count': int,
-        }
+        ``{'hits': [...], 'query': str, 'total_hits': int,
+        'index_section_count': int, 'notes': list[str]}``
 
     Raises:
-        ValueError: scope or top_k is out of range.
+        ValueError: query is empty/whitespace, scope is invalid, top_k is
+            <= 0, or service is not in the indexed set.
         FileNotFoundError: the SQLite index has not been built yet.
     """
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("query must be a non-empty string")
     if scope not in ("public", "swiss", "both"):
         raise ValueError(f"scope must be one of 'public', 'swiss', 'both' (got {scope!r})")
-    top_k = max(1, min(50, int(top_k)))
+
+    try:
+        top_k_int = int(top_k)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"top_k must be an integer (got {top_k!r})") from exc
+    if top_k_int <= 0:
+        raise ValueError(f"top_k must be >= 1 (got {top_k_int})")
+
+    notes: list[str] = []
+    if top_k_int > _TOP_K_MAX:
+        notes.append(f"top_k={top_k_int} capped to {_TOP_K_MAX}")
+        top_k_int = _TOP_K_MAX
+
+    if service is not None:
+        if not isinstance(service, str) or not service.strip():
+            raise ValueError("service must be None or a non-empty string")
+        valid = _indexed_services()
+        if service not in valid:
+            sample = ", ".join(sorted(valid)[:8])
+            raise ValueError(
+                f"unknown service {service!r}. "
+                f"{len(valid)} services are indexed; first few: {sample}, ..."
+            )
 
     match_expr = _escape_match(query)
 
@@ -164,15 +205,17 @@ def search_otc_docs(
         ORDER BY rank
         LIMIT ?
     """  # nosec B608
-    params.append(top_k)
+    params.append(top_k_int)
 
     with closing(_open_db()) as con:
         try:
             rows = con.execute(sql, params).fetchall()
         except sqlite3.OperationalError as exc:
-            # Most likely cause: a query that is technically valid FTS5 but
-            # produces nothing parseable after _escape_match. Convert to an
-            # empty-hits response rather than blowing up the tool call.
+            # Catches the rare case where _escape_match output is still
+            # rejected by FTS5 (e.g. a token consisting entirely of
+            # punctuation that the tokenizer drops). Surface as zero hits
+            # rather than a 500 — query was syntactically valid at our
+            # boundary, just unsearchable post-tokenization.
             if "fts5: syntax error" in str(exc).lower():
                 rows = []
             else:
@@ -186,6 +229,7 @@ def search_otc_docs(
         "query": query,
         "total_hits": len(hits),
         "index_section_count": total_sections,
+        "notes": notes,
     }
 
 
@@ -196,75 +240,160 @@ def get_otc_doc_section(
     """Fetch one (or one section of one) indexed documentation page.
 
     Args:
-        url: Canonical URL as returned by `search_otc_docs` (with or without
-             the section anchor `#...`).
-        section: Optional heading title to restrict the response to a single
-                 H2 / H3 section. Case-insensitive substring match against
-                 the indexed h2/h3 columns. None returns every section of
-                 the page concatenated under one record.
+        url: Canonical absolute https://docs.otc.t-systems.com/... URL as
+             returned by ``search_otc_docs``. Optionally with ``#anchor``.
+             Empty / wildcard / relative URLs are rejected.
+        section: Optional H2/H3 heading title to restrict the response to a
+                 single section. Case-insensitive substring match against
+                 the indexed h2/h3 columns. Empty string is rejected; pass
+                 None for "no section filter".
 
     Returns:
-        {
-            'url': str,             # the requested URL (without section override)
-            'title': str,           # page title
-            'service': str,
-            'cloud': str,
-            'upstream_commit': str,
-            'sections': [           # one entry per H2/H3 chunk that survived filtering
-                {'h2': str, 'h3': str, 'anchor': str, 'body': str}, ...
-            ],
-            'matched': bool,        # False if no rows matched
-        }
+        ``{'url', 'title', 'service', 'cloud', 'upstream_commit', 'sections',
+        'matched', 'page_found', 'available_sections'}``. ``page_found`` is
+        true whenever any row exists for the page; ``matched`` is true only
+        when the section filter (if any) actually selected something.
+        ``available_sections`` lists the page's H2 headings when the page
+        was found but the filter excluded everything — so the caller can
+        retry with a known-good section name.
 
     Raises:
+        ValueError: url is empty/whitespace, doesn't start with ``https://``,
+                    or section is the empty string.
         FileNotFoundError: the SQLite index has not been built yet.
     """
-    # Strip an optional `#anchor` fragment so the caller can paste either
-    # form back. The indexed `url` column already includes the anchor when
-    # present, but for a "whole page" request we want every section, so we
-    # match on the URL prefix.
-    fragment = ""
-    base_url = url
-    if "#" in url:
-        base_url, fragment = url.split("#", 1)
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("url must be a non-empty string")
+    if not url.startswith("https://"):
+        raise ValueError(
+            f"url must be an absolute https://docs.otc.t-systems.com/... URL (got {url!r})"
+        )
+    if section is not None:
+        if not isinstance(section, str) or not section.strip():
+            raise ValueError("section must be None or a non-empty non-whitespace string")
 
-    sql_parts = ["url LIKE ?"]
-    params: list[Any] = [base_url + "%"]
+    # Section anchor handling. The indexed `url` column always stores the
+    # full canonical URL including the anchor (e.g. `<page>#<anchor>`), so:
+    #   - URL with `#anchor`    → exact match on that one section.
+    #   - URL without `#anchor` → match every row whose URL is `<page>#*`.
+    # LIKE-pattern characters in user input (% _) are escaped so a typo or
+    # malicious wildcard can't fan out into other pages (issue #40).
+    if "#" in url:
+        sql_where = "url = ?"
+        params: list[Any] = [url]
+        page_url, _frag = url.split("#", 1)
+    else:
+        page_url = url
+        like_pattern = _escape_like(url) + "#%"
+        sql_where = "(url = ? OR url LIKE ? ESCAPE '\\')"
+        params = [url, like_pattern]
+
     if section:
-        sql_parts.append("(LOWER(h2) LIKE ? OR LOWER(h3) LIKE ?)")
+        sql_where = f"({sql_where}) AND (LOWER(h2) LIKE ? OR LOWER(h3) LIKE ?)"
         like = f"%{section.lower()}%"
         params.extend([like, like])
-    elif fragment:
-        # The caller passed a specific section anchor — honour it.
-        sql_parts.append("anchor = ?")
-        params.append(fragment)
 
-    # `sql_parts` is built from literal strings above; user input only flows
-    # in via the `params` list bound to placeholders.
     sql = f"""
         SELECT url, title, service, cloud, upstream_commit, h2, h3, anchor, body
         FROM docs
-        WHERE {" AND ".join(sql_parts)}
+        WHERE {sql_where}
         ORDER BY rowid
     """  # nosec B608
 
     with closing(_open_db()) as con:
         rows = con.execute(sql, params).fetchall()
+        if rows:
+            page_found = True
+        else:
+            # No rows under the combined filter. Disambiguate: does the page
+            # itself exist (so the caller should retry with a different
+            # section / no section), or is the URL unknown to the index?
+            if "#" in url:
+                # Specific anchor URL didn't match. Ask the page-level query
+                # to find out whether the page exists at all.
+                page_like = _escape_like(page_url) + "#%"
+                page_rows = con.execute(
+                    "SELECT 1 FROM docs WHERE url = ? OR url LIKE ? ESCAPE '\\' LIMIT 1",
+                    [page_url, page_like],
+                ).fetchall()
+                page_found = bool(page_rows)
+            elif section:
+                # Page-without-anchor + section filter excluded everything.
+                # Re-check whether the page exists without the section filter.
+                page_like = _escape_like(page_url) + "#%"
+                page_rows = con.execute(
+                    "SELECT 1 FROM docs WHERE url = ? OR url LIKE ? ESCAPE '\\' LIMIT 1",
+                    [page_url, page_like],
+                ).fetchall()
+                page_found = bool(page_rows)
+            else:
+                page_found = False
+
+        available_sections: list[str] = []
+        if page_found and not rows:
+            page_like = _escape_like(page_url) + "#%"
+            avail = con.execute(
+                """
+                SELECT DISTINCT h2 FROM docs
+                WHERE (url = ? OR url LIKE ? ESCAPE '\\') AND h2 != ''
+                ORDER BY rowid
+                """,
+                [page_url, page_like],
+            ).fetchall()
+            available_sections = [r[0] for r in avail]
 
     if not rows:
-        return {
-            "url": base_url,
+        first_meta: dict[str, str] = {
             "title": "",
             "service": "",
             "cloud": "",
             "upstream_commit": "",
+        }
+        if page_found:
+            with closing(_open_db()) as con:
+                page_like = _escape_like(page_url) + "#%"
+                meta_row = con.execute(
+                    """
+                    SELECT title, service, cloud, upstream_commit FROM docs
+                    WHERE url = ? OR url LIKE ? ESCAPE '\\'
+                    ORDER BY rowid
+                    LIMIT 1
+                    """,
+                    [page_url, page_like],
+                ).fetchone()
+            if meta_row is not None:
+                first_meta = {
+                    "title": meta_row["title"],
+                    "service": meta_row["service"],
+                    "cloud": meta_row["cloud"],
+                    "upstream_commit": meta_row["upstream_commit"],
+                }
+        return {
+            "url": page_url,
+            "title": first_meta["title"],
+            "service": first_meta["service"],
+            "cloud": first_meta["cloud"],
+            "upstream_commit": first_meta["upstream_commit"],
             "sections": [],
             "matched": False,
+            "page_found": page_found,
+            "available_sections": available_sections,
         }
+
+    # Sanity: every selected row must belong to the same page. The escaped-
+    # LIKE + anchor-boundary filter above guarantees this for valid input;
+    # the assertion makes the invariant explicit so a future schema change
+    # doesn't silently re-introduce cross-page mixing (issue #40).
+    distinct_urls = {r["url"].split("#", 1)[0] for r in rows}
+    if len(distinct_urls) > 1:
+        raise RuntimeError(
+            f"internal error: section query matched multiple pages "
+            f"({len(distinct_urls)} distinct URLs). Refusing to mix metadata."
+        )
 
     first = rows[0]
     return {
-        "url": base_url,
+        "url": page_url,
         "title": first["title"],
         "service": first["service"],
         "cloud": first["cloud"],
@@ -279,4 +408,6 @@ def get_otc_doc_section(
             for r in rows
         ],
         "matched": True,
+        "page_found": True,
+        "available_sections": [],
     }

@@ -30,11 +30,18 @@ jobs:
 
       - name: Run pip-audit
         run: |
+          # Export the resolved dependency tree WITHOUT the local project (its
+          # dev version isn't on PyPI, so pip-audit can't audit it). This lets
+          # --strict fail loudly on any *third-party* dep that can't be
+          # audited, while ignoring the editable self-install (#47).
+          uv export --format requirements-txt --no-emit-project --no-hashes \
+            > requirements-audit.txt
           echo "Running pip-audit to check for known CVEs..."
-          uv run pip-audit --desc --format json | tee audit-report.json
+          uv run pip-audit --desc --format json -r requirements-audit.txt \
+            | tee audit-report.json
           echo ""
           echo "Failing on CVEs with medium or higher severity..."
-          uv run pip-audit --desc --strict
+          uv run pip-audit --desc --strict -r requirements-audit.txt
 
       - name: Upload audit report
         if: always()
