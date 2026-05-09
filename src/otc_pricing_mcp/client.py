@@ -169,6 +169,26 @@ class OTCPricingClient:
 
                     return api_response
 
+                except httpx.HTTPStatusError as e:
+                    # Re-raise with a sanitised message that omits the upstream
+                    # URL — the raw httpx message includes the full URL and query
+                    # string, which leaks internal API details (issue #34).
+                    status = e.response.status_code
+                    clean = httpx.HTTPStatusError(
+                        f"upstream HTTP {status}",
+                        request=e.request,
+                        response=e.response,
+                    )
+                    last_error = clean
+                    logger.warning(
+                        "upstream_request_http_error",
+                        service=service,
+                        request_id=request_id,
+                        error=f"upstream HTTP {status}",
+                        status_code=status,
+                        attempt=attempt_count,
+                    )
+                    raise clean from None
                 except httpx.HTTPError as e:
                     last_error = e
                     logger.warning(
@@ -176,9 +196,7 @@ class OTCPricingClient:
                         service=service,
                         request_id=request_id,
                         error=str(e),
-                        status_code=getattr(e.response, "status_code", None)
-                        if hasattr(e, "response")
-                        else None,
+                        status_code=None,
                         attempt=attempt_count,
                     )
                     raise
