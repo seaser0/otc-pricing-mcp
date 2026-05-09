@@ -8,7 +8,7 @@ from typing import Any
 from otc_pricing_mcp.client import OTCPricingClient
 from otc_pricing_mcp.models import PriceItem
 from otc_pricing_mcp.normalize import extract_items
-from otc_pricing_mcp.tools.discovery import list_regions
+from otc_pricing_mcp.tools.discovery import list_regions, list_services
 
 # Max concurrent HTTP requests for multi-service fan-out
 MAX_CONCURRENT_REQUESTS = 5
@@ -101,7 +101,22 @@ def query_pricing(
                 f"Use list_regions() to discover available regions."
             )
 
-    max_results = max_results or 5000
+    # Reject max_results=0 and negatives explicitly — 0 is falsy, so "or 5000"
+    # would silently expand it to 5000 (issue #33). None means "use default".
+    max_results = 5000 if max_results is None else max_results
+    if max_results < 1:
+        raise ValueError(f"max_results must be >= 1 (got {max_results})")
+
+    # Validate services against the known catalog before hitting upstream so
+    # error messages never leak the internal API URL (issue #34/#35).
+    known_services = list_services()
+    if known_services:
+        unknown = [s for s in services if s not in known_services]
+        if unknown:
+            raise ValueError(
+                f"Unknown service(s): {unknown!r}. "
+                f"Use list_services() to discover available services."
+            )
 
     params: dict[str, Any] = {
         "productType": "OTC",
