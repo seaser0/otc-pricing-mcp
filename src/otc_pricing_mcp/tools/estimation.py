@@ -90,6 +90,15 @@ def estimate_monthly_cost(
     if not items:
         raise ValueError("At least one item is required")
 
+    # Issue #36: reject negative/zero quantities and negative hours upfront.
+    for i, item in enumerate(items):
+        _qty = float(item.get("quantity", 1))
+        _hrs = float(item.get("hours_per_month", 730))
+        if _qty < 1:
+            raise ValueError(f"items[{i}].quantity must be >= 1 (got {_qty})")
+        if _hrs < 0:
+            raise ValueError(f"items[{i}].hours_per_month must be >= 0 (got {_hrs})")
+
     # Collect all unique product IDs
     product_ids = list({item["id"] for item in items if "id" in item})
     if not product_ids:
@@ -124,6 +133,9 @@ def estimate_monthly_cost(
                 continue
     finally:
         client.close()
+
+    # Issue #31: identify which requested IDs were not found upstream.
+    unknown_product_ids = [pid for pid in product_ids if pid not in product_data]
 
     # Calculate costs
     item_results: list[dict[str, Any]] = []
@@ -217,6 +229,14 @@ def estimate_monthly_cost(
 
     result["tiers_unavailable"] = tiers_unavailable
     result["items"] = item_results
+
+    # Issue #31: surface unknown IDs as warnings so callers (and server.py's
+    # isError gate) can distinguish "no product found" from a genuine €0 result.
+    warnings: list[str] = [
+        f"Product {pid!r} not found in catalog" for pid in unknown_product_ids
+    ]
+    result["warnings"] = warnings
+    result["unknown_product_ids"] = unknown_product_ids
     return result
 
 
@@ -232,8 +252,8 @@ def compare_billing_models(
 
     Args:
         product_id: Product ID (e.g., 'OTC_S3M1_LI'). Required.
-        quantity: Quantity (default: 1).
-        hours_per_month: Hours per month (default: 730, approximately 24/7).
+        quantity: Quantity (default: 1). Must be >= 1.
+        hours_per_month: Hours per month (default: 730, approximately 24/7). Must be >= 0.
 
     Returns:
         Dictionary with structure:
@@ -252,11 +272,18 @@ def compare_billing_models(
             # or:
             #   {'available': True, 'monthly_cost': ..., 'upfront_cost': ...,
             #    'total_cost': ..., 'monthly_equivalent': ...,
-            #    'savings_percent': ...}                   (tier is on offer)
+            #    'savings_percent': float,                 (negative = reserved costs MORE)
+            #    'reserved_more_expensive_than_payg': bool}
             'reserved_12m': {...},
             'reserved_24m': {...},
             'reserved_36m': {...},
         }
+
+    Note:
+        savings_percent may be negative when the reserved plan's monthly
+        equivalent exceeds the PAYG rate (e.g. at low utilisation). A negative
+        value is a real signal — "do NOT reserve". The previous behaviour
+        clamped it to 0 (#32), which hid cost over-runs from callers.
 
     A reserved tier is treated as not offered when both Rxx and RUxx are 0.0
     in the upstream payload — without this distinction the tool was reporting
@@ -269,6 +296,12 @@ def compare_billing_models(
         # Compare for 2 units
         >>> compare_billing_models('OTC_S3M1_LI', quantity=2)
     """
+    # Issue #36: validate before delegating to estimate_monthly_cost.
+    if quantity < 1:
+        raise ValueError(f"quantity must be >= 1 (got {quantity})")
+    if hours_per_month < 0:
+        raise ValueError(f"hours_per_month must be >= 0 (got {hours_per_month})")
+
     estimation = estimate_monthly_cost(
         [
             {
@@ -302,7 +335,8 @@ def compare_billing_models(
             "upfront_cost": upfront,
             "total_cost": total,
             "monthly_equivalent": monthly_equivalent,
-            "savings_percent": max(0.0, savings),  # Negative savings clamped to 0
+            "savings_percent": savings,  # may be negative — reserved costs more than PAYG (#32)
+            "reserved_more_expensive_than_payg": savings < 0,
         }
 
     return {

@@ -251,6 +251,20 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         elif name == "estimate_monthly_cost":
             result = await asyncio.to_thread(estimate_monthly_cost, arguments["items"])
             text = json.dumps(result, ensure_ascii=False)
+            # Issue #31: all items unknown → no priced result, treat as error.
+            est_warnings = result.get("warnings", [])
+            if est_warnings and not result.get("items"):
+                duration = time.time() - start_time
+                observability.metrics.requests_total.labels(tool=name, status="error").inc()
+                observability.metrics.request_duration_seconds.labels(tool=name).observe(duration)
+                logger.warning(
+                    "tool_invocation_upstream_error",
+                    tool=name,
+                    request_id=request_id,
+                    warnings=est_warnings,
+                    duration_seconds=duration,
+                )
+                return _err(text)
         elif name == "compare_billing_models":
             result = await asyncio.to_thread(
                 compare_billing_models,
