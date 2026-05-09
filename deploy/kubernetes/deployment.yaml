@@ -5,7 +5,7 @@ metadata:
   namespace: mcp-otc-pricing
   labels:
     app: otc-pricing-mcp
-    version: v0.1.7
+    version: v0.1.9
 spec:
   replicas: 1
   selector:
@@ -20,7 +20,7 @@ spec:
     metadata:
       labels:
         app: otc-pricing-mcp
-        version: v0.1.7
+        version: v0.1.9
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: otc-pricing-mcp
-        image: ghcr.io/seaser0/otc-pricing-mcp:v0.1.7
+        image: ghcr.io/seaser0/otc-pricing-mcp:v0.1.9
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
