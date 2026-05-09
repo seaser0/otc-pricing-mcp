@@ -187,3 +187,48 @@ class TestCallToolRouting:
         with patch("otc_pricing_mcp.server.query_pricing", return_value=bad_result):
             result = self._invoke_full("query_pricing", {"services": ["ecs"]})
         assert result.isError is True
+
+    def test_estimate_monthly_cost_all_unknown_sets_isError_true(self) -> None:
+        """issue #31: all product IDs unknown → isError=true."""
+        bad_result = {
+            "total_payg": 0.0,
+            "currency": "EUR",
+            "items": [],
+            "tiers_unavailable": ["reserved_12m", "reserved_24m", "reserved_36m"],
+            "total_reserved_12m": None,
+            "total_reserved_24m": None,
+            "total_reserved_36m": None,
+            "total_reserved_upfront_12m": None,
+            "total_reserved_upfront_24m": None,
+            "total_reserved_upfront_36m": None,
+            "warnings": ["Product 'BOGUS' not found in catalog"],
+            "unknown_product_ids": ["BOGUS"],
+        }
+        with patch("otc_pricing_mcp.server.estimate_monthly_cost", return_value=bad_result):
+            result = self._invoke_full(
+                "estimate_monthly_cost", {"items": [{"id": "BOGUS"}]}
+            )
+        assert result.isError is True
+
+    def test_estimate_monthly_cost_partial_unknown_not_isError(self) -> None:
+        """issue #31: partial result (some items priced) → isError=false."""
+        partial_result = {
+            "total_payg": 10.0,
+            "currency": "EUR",
+            "items": [{"id": "OTC_REAL", "payg": 10.0, "currency": "EUR"}],
+            "tiers_unavailable": [],
+            "total_reserved_12m": None,
+            "total_reserved_24m": None,
+            "total_reserved_36m": None,
+            "total_reserved_upfront_12m": None,
+            "total_reserved_upfront_24m": None,
+            "total_reserved_upfront_36m": None,
+            "warnings": ["Product 'BOGUS' not found in catalog"],
+            "unknown_product_ids": ["BOGUS"],
+        }
+        with patch("otc_pricing_mcp.server.estimate_monthly_cost", return_value=partial_result):
+            result = self._invoke_full(
+                "estimate_monthly_cost",
+                {"items": [{"id": "OTC_REAL"}, {"id": "BOGUS"}]},
+            )
+        assert result.isError is False
