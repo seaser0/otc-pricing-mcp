@@ -31,10 +31,12 @@ jobs:
       - name: Run pip-audit
         run: |
           echo "Running pip-audit to check for known CVEs..."
-          uv run pip-audit --desc --format json | tee audit-report.json
+          uv run pip-audit --desc --format json --skip-editable | tee audit-report.json
           echo ""
           echo "Failing on CVEs with medium or higher severity..."
-          uv run pip-audit --desc --strict
+          # --skip-editable so the local editable install (otc-pricing-mcp@<dev>)
+          # doesn't fail --strict before its version is published to PyPI (#47).
+          uv run pip-audit --desc --strict --skip-editable
 
       - name: Upload audit report
         if: always()
