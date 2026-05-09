@@ -25,6 +25,7 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
+        kubectl.kubernetes.io/restartedAt: "2026-05-09T10:45:00Z"
     spec:
       affinity:
         podAntiAffinity:
