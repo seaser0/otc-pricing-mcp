@@ -152,9 +152,7 @@ class TestQueryPricing:
         assert any("ecs/eu-ch2" in note for note in result["notes"])
         assert any("0 rows" in note for note in result["notes"])
 
-    def test_query_pricing_eu_ch2_sets_client_param(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_query_pricing_eu_ch2_sets_client_param(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """eu-ch2 must inject `client=2` so the Swiss/CHF catalog is exposed (#50)."""
         captured: dict[str, Any] = {}
 
