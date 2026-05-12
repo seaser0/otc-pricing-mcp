@@ -36,6 +36,35 @@ class UpstreamError(RuntimeError):
     """
 
 
+def _strip_ghost_eu_ch2_rows(api_response: ApiResponse) -> int:
+    """Drop region=eu-ch2 rows from a public-catalog (client=1) response.
+
+    The public catalog returns 75 'ghost' rows tagged region=eu-ch2 but priced
+    in EUR — for 35 of them the matching real entry exists in client=2 with the
+    same numerical amount but CHF currency, i.e. the currency label is wrong;
+    the remaining 40 are 0.00 EUR free-tier stubs. Surfacing them silently
+    misrepresents Swiss pricing (#52). Real eu-ch2 prices come from client=2
+    (set by callers via region='eu-ch2', see #50/#51).
+
+    Mutates `api_response.result` in place. Returns the number of rows dropped
+    (for logging/observability).
+    """
+    dropped = 0
+    result = api_response.result
+    if isinstance(result, dict):
+        for svc, items in result.items():
+            if not items:
+                continue
+            kept = [it for it in items if it.get("region") != "eu-ch2"]
+            dropped += len(items) - len(kept)
+            result[svc] = kept
+    elif isinstance(result, list):
+        kept_list = [it for it in result if it.get("region") != "eu-ch2"]
+        dropped = len(result) - len(kept_list)
+        api_response.result = kept_list
+    return dropped
+
+
 # Retry configuration
 RETRIES = Retrying(
     retry=retry_if_exception_type(httpx.HTTPError),
@@ -158,6 +187,21 @@ class OTCPricingClient:
                         api_response = ApiResponse(**data["response"])
                     except Exception as e:
                         raise ValueError(f"Failed to parse API response: {e}") from e
+
+                    # When the caller did not explicitly request client=2,
+                    # drop region=eu-ch2 ghost rows whose currency label is
+                    # wrong (#52). Real Swiss CHF pricing is fetched by
+                    # passing client=2 (set automatically by query_pricing /
+                    # estimate_monthly_cost when the caller targets Swiss).
+                    if params.get("client") != "2":
+                        dropped = _strip_ghost_eu_ch2_rows(api_response)
+                        if dropped:
+                            logger.debug(
+                                "ghost_eu_ch2_rows_stripped",
+                                service=service,
+                                request_id=request_id,
+                                dropped=dropped,
+                            )
 
                     # Record success metrics
                     duration = time.time() - start_time
