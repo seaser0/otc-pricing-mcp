@@ -112,12 +112,18 @@ def estimate_monthly_cost(
     try:
         for product_id in product_ids:
             try:
-                response = client.get(
-                    {
-                        "productType": "OTC",
-                        "limitMax": "5000",
-                    }
-                )
+                params: dict[str, Any] = {
+                    "productType": "OTC",
+                    "limitMax": "5000",
+                }
+                # Swiss OTC product IDs carry the region suffix (e.g.
+                # `OTC_S3M1_LI-eu-ch2`) and live in a separate upstream catalog
+                # that is only exposed when the undocumented `client=2`
+                # parameter is set. Without this, Swiss IDs silently resolve to
+                # 0 items and `estimate_monthly_cost` returns total_payg=0. See #50.
+                if product_id.lower().endswith("-eu-ch2"):
+                    params["client"] = "2"
+                response = client.get(params)
                 # Search through all services to find the product
                 if isinstance(response.result, dict):
                     for service_items in response.result.values():

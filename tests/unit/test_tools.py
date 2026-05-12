@@ -152,6 +152,53 @@ class TestQueryPricing:
         assert any("ecs/eu-ch2" in note for note in result["notes"])
         assert any("0 rows" in note for note in result["notes"])
 
+    def test_query_pricing_eu_ch2_sets_client_param(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """eu-ch2 must inject `client=2` so the Swiss/CHF catalog is exposed (#50)."""
+        captured: dict[str, Any] = {}
+
+        def _fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            captured["params"] = dict(params)
+            return (service, [], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", _fake_fetch)
+        query_pricing(["ecs"], region="eu-ch2", max_results=1)
+
+        assert captured["params"].get("client") == "2"
+        assert captured["params"].get("filterBy[region]") == "eu-ch2"
+
+    def test_query_pricing_non_swiss_region_omits_client_param(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Public-cloud regions (eu-de/eu-nl) must NOT set `client` (#50)."""
+        seen: list[dict] = []
+
+        def _fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            seen.append(dict(params))
+            return (service, [], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", _fake_fetch)
+        for region in ("eu-de", "eu-nl"):
+            query_pricing(["ecs"], region=region, max_results=1)
+
+        assert all("client" not in p for p in seen)
+
+    def test_query_pricing_no_region_omits_client_param(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Region-less queries stay on the default catalog (no `client` param) (#50)."""
+        captured: dict[str, Any] = {}
+
+        def _fake_fetch(service: str, params: dict) -> tuple[str, list, str | None]:
+            captured["params"] = dict(params)
+            return (service, [], None)
+
+        monkeypatch.setattr(pricing_module, "_fetch_service_pricing", _fake_fetch)
+        query_pricing(["ecs"], max_results=1)
+
+        assert "client" not in captured["params"]
+
     def test_query_pricing_upstream_error_emits_warning_not_note(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -647,3 +694,71 @@ class TestGetServiceSchemaValidation:
     def test_whitespace_service_raises(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
             get_service_schema("   ")
+
+
+class TestEstimateSwissOTCClientParam:
+    """Issue #50 — Swiss OTC product IDs require `client=2` to resolve upstream."""
+
+    @staticmethod
+    def _make_capturing_client(product: dict[str, str]) -> tuple[type, list[dict]]:
+        seen: list[dict] = []
+
+        class _Resp:
+            result = {"ecs": [product]}
+
+        class _C:
+            def __init__(self) -> None:
+                pass
+
+            def get(self, p: dict) -> Any:
+                seen.append(dict(p))
+                return _Resp()
+
+            def close(self) -> None:
+                pass
+
+        return _C, seen
+
+    def test_swiss_id_triggers_client_param(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A product ID with the `-eu-ch2` suffix must inject `client=2` (#50)."""
+        product = {
+            "id": "OTC_S3M1_LI-eu-ch2",
+            "currency": "CHF",
+            "priceAmount": "0.10 CHF",
+            "R12": "60.00 CHF",
+            "R24": "50.00 CHF",
+            "R36": "40.00 CHF",
+            "RU12": "100.00 CHF",
+            "RU24": "200.00 CHF",
+            "RU36": "300.00 CHF",
+        }
+        client_cls, seen = self._make_capturing_client(product)
+        monkeypatch.setattr(estimation_module, "OTCPricingClient", client_cls)
+
+        result = estimate_monthly_cost([{"id": "OTC_S3M1_LI-eu-ch2"}])
+
+        assert len(seen) == 1
+        assert seen[0].get("client") == "2"
+        assert result["currency"] == "CHF"
+        assert result["total_payg"] > 0
+
+    def test_non_swiss_id_omits_client_param(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Plain (public-cloud) product IDs must NOT set `client` (#50)."""
+        product = {
+            "id": "OTC_S3M1_LI",
+            "currency": "EUR",
+            "priceAmount": "0.10 EUR",
+            "R12": "60.00 EUR",
+            "R24": "50.00 EUR",
+            "R36": "40.00 EUR",
+            "RU12": "100.00 EUR",
+            "RU24": "200.00 EUR",
+            "RU36": "300.00 EUR",
+        }
+        client_cls, seen = self._make_capturing_client(product)
+        monkeypatch.setattr(estimation_module, "OTCPricingClient", client_cls)
+
+        estimate_monthly_cost([{"id": "OTC_S3M1_LI"}])
+
+        assert len(seen) == 1
+        assert "client" not in seen[0]

@@ -116,6 +116,11 @@ def query_pricing(
 
     if region:
         params["filterBy[region]"] = region
+        # The OTC price calculator exposes the Swiss catalog (eu-ch2, CHF) only
+        # when the undocumented `client=2` query parameter is set; without it
+        # eu-ch2 queries return 0 rows even for services that exist there. See #50.
+        if region == "eu-ch2":
+            params["client"] = "2"
 
     # Add additional filters
     for key, value in filters.items():
