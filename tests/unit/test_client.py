@@ -61,9 +61,7 @@ class TestStripGhostEuCh2Rows:
             {"id": "OTC_OBSCD_SP_1", "region": "eu-de", "currency": "EUR"}
         ]
         assert resp.result["apig"] == []
-        assert resp.result["ecs"] == [
-            {"id": "OTC_S3M1_LI", "region": "eu-de", "currency": "EUR"}
-        ]
+        assert resp.result["ecs"] == [{"id": "OTC_S3M1_LI", "region": "eu-de", "currency": "EUR"}]
 
     def test_list_payload_drops_eu_ch2_rows(self) -> None:
         """Flat list payload: eu-ch2 rows go, other regions stay."""
@@ -85,9 +83,7 @@ class TestStripGhostEuCh2Rows:
 
     def test_no_ghosts_is_no_op(self) -> None:
         """A response without any eu-ch2 rows is returned unchanged."""
-        resp = _make_api_response(
-            {"ecs": [{"id": "OTC_S3M1_LI", "region": "eu-de"}]}
-        )
+        resp = _make_api_response({"ecs": [{"id": "OTC_S3M1_LI", "region": "eu-de"}]})
 
         dropped = _strip_ghost_eu_ch2_rows(resp)
 
@@ -147,9 +143,7 @@ class TestClientGetGhostFilterIntegration:
 
         monkeypatch.setattr(httpx.Client, "get", _fake_get)
 
-    def test_client_1_response_strips_ghost_rows(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_client_1_response_strips_ghost_rows(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without `client=2`, eu-ch2 rows are removed from the parsed response (#52)."""
         self._patch_httpx(monkeypatch)
         c = OTCPricingClient()
@@ -163,9 +157,7 @@ class TestClientGetGhostFilterIntegration:
             {"id": "OTC_OBSCD_SP_1", "region": "eu-de", "currency": "EUR"}
         ]
 
-    def test_client_2_response_keeps_eu_ch2_rows(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_client_2_response_keeps_eu_ch2_rows(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """With `client=2`, eu-ch2 rows pass through untouched (#51 regression guard)."""
         self._patch_httpx(monkeypatch)
         c = OTCPricingClient()
