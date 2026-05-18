@@ -1,10 +1,42 @@
 {
   "schema_version": 1,
-  "section_count": 4714,
+  "section_count": 10446,
   "services": [
     {
       "branch": "main",
-      "last_synced": "2026-05-08T20:57:51Z",
+      "last_synced": "2026-05-18T06:48:35Z",
+      "rst_files_seen": 37,
+      "sections_indexed": 126,
+      "service": "anti-ddos",
+      "upstream_commit": "8ff5254f6b7d669170bdacbdf5058e9adcfbe75f"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:48:59Z",
+      "rst_files_seen": 133,
+      "sections_indexed": 529,
+      "service": "auto-scaling",
+      "upstream_commit": "fa9d756d5deb19155c73caa972f9cc754baeb288"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:47:28Z",
+      "rst_files_seen": 180,
+      "sections_indexed": 739,
+      "service": "cloud-eye",
+      "upstream_commit": "248b2203de9a378adea18a296ce8b11f5d9bd20c"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:47:47Z",
+      "rst_files_seen": 75,
+      "sections_indexed": 271,
+      "service": "cloud-trace-service",
+      "upstream_commit": "e4bab91191fe1f70dfdc410820950fd38357d709"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:44:55Z",
       "rst_files_seen": 428,
       "sections_indexed": 1923,
       "service": "elastic-cloud-server",
@@ -12,7 +44,15 @@
     },
     {
       "branch": "main",
-      "last_synced": "2026-05-08T20:58:53Z",
+      "last_synced": "2026-05-18T06:47:55Z",
+      "rst_files_seen": 116,
+      "sections_indexed": 413,
+      "service": "elastic-ip",
+      "upstream_commit": "c8b18d61088d28475662b1edb019c489775cb2cd"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:45:47Z",
       "rst_files_seen": 305,
       "sections_indexed": 1284,
       "service": "elastic-volume-service",
@@ -20,12 +60,57 @@
     },
     {
       "branch": "main",
-      "last_synced": "2026-05-08T21:00:02Z",
+      "last_synced": "2026-05-18T06:48:39Z",
+      "rst_files_seen": 222,
+      "sections_indexed": 753,
+      "service": "image-management-service",
+      "upstream_commit": "7f136da472e76282533d2a9d870481e723bd5100"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:48:24Z",
+      "rst_files_seen": 112,
+      "sections_indexed": 408,
+      "service": "key-management-service",
+      "upstream_commit": "c2d17c2ee59b6268a410b5441757b99369c72c26"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:48:09Z",
+      "rst_files_seen": 147,
+      "sections_indexed": 607,
+      "service": "nat-gateway",
+      "upstream_commit": "b9271b3dcff3613239eea86fa8a82605366022ab"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:46:18Z",
       "rst_files_seen": 326,
       "sections_indexed": 1507,
       "service": "object-storage-service",
       "upstream_commit": "b9835f85be13fa0f82eefc2440b83beeaf7fcdd4"
+    },
+    {
+      "branch": "main",
+      "last_synced": "2026-05-18T06:46:49Z",
+      "rst_files_seen": 410,
+      "sections_indexed": 1886,
+      "service": "virtual-private-cloud",
+      "upstream_commit": "eb03d888b37b893494abeb7addccc00ea77d0bf9"
     }
   ],
-  "skipped": []
+  "skipped": [
+    {
+      "reason": "HTTP 404",
+      "service": "cloud-backup-and-recovery"
+    },
+    {
+      "reason": "HTTP 404",
+      "service": "elastic-load-balancer"
+    },
+    {
+      "reason": "HTTP 404",
+      "service": "identity-and-access-management"
+    }
+  ]
 }
