@@ -14,7 +14,6 @@ resources:
 - deployment.yaml
 - service.yaml
 - ingress.yaml
-- servicemonitor.yaml
 - poddisruptionbudget.yaml
 - network-policy.yaml
 
@@ -26,4 +25,3 @@ configMapGenerator:
 - name: otc-pricing-mcp-config
   literals:
   - LOG_LEVEL=INFO
-  - METRICS_PORT=8080
