@@ -17,8 +17,9 @@ dependencies = [
     "structlog>=24.1.0",
     "prometheus-client>=0.18.0",
     "tenacity>=8.2.0",
-    "starlette>=0.41.0",
+    "starlette>=1.0.1",
     "uvicorn>=0.32.0",
+    "pyjwt>=2.13.0",
 ]
 
 [project.optional-dependencies]
