@@ -40,7 +40,9 @@ jobs:
           uv run pip-audit --desc --format json -r requirements-audit.txt \
             | tee audit-report.json
           echo ""
-          echo "Failing on CVEs with medium or higher severity..."
+          # NOTE: --strict fails on ANY known vulnerability regardless of
+          # severity (pip-audit has no severity gating). No CVSS filtering here.
+          echo "Failing on any known CVE (pip-audit --strict)..."
           uv run pip-audit --desc --strict -r requirements-audit.txt
 
       - name: Upload audit report

@@ -137,8 +137,14 @@ jobs:
 
       - name: Run pip-audit
         run: |
+          # Audit the RESOLVED project dependency tree only (mirrors
+          # security.yml). Auditing the raw venv with --skip-editable also
+          # flags build tooling like pip/setuptools (e.g. pip PYSEC-2026-196),
+          # which isn't a project dependency and is pure CI noise.
           echo "Checking for known CVEs in dependencies..."
-          source .venv/bin/activate && pip-audit --desc --skip-editable
+          uv export --format requirements-txt --no-emit-project --no-hashes \
+            > requirements-audit.txt
+          uv run pip-audit --desc --strict -r requirements-audit.txt
 
   # Container security scan with Trivy
   security-trivy:
