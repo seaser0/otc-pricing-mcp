@@ -5,13 +5,38 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from otc_pricing_mcp.client import OTCPricingClient
+from otc_pricing_mcp.client import DEFAULT_BASE_URL, V2_BASE_URL, V2_ONLY_SERVICES, OTCPricingClient
 from otc_pricing_mcp.models import PriceItem
 from otc_pricing_mcp.normalize import extract_items
 from otc_pricing_mcp.tools.discovery import list_regions
 
 # Max concurrent HTTP requests for multi-service fan-out
 MAX_CONCURRENT_REQUESTS = 5
+
+# v2 float fields → their "amount currency" string equivalents (for parse_price compat)
+_V2_PRICE_FIELD_MAP = {
+    "priceAmount": "priceAmountCalculated",
+    "R12": "R12Calculated",
+    "R24": "R24Calculated",
+    "R36": "R36Calculated",
+    "RU12": "RU12Calculated",
+    "RU24": "RU24Calculated",
+    "RU36": "RU36Calculated",
+}
+
+
+def _normalize_v2_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Remap v2 float price fields to their string-with-currency calculated equivalents.
+
+    The v2 API returns priceAmount as a raw float (0.09177) while the v1 parser
+    and estimation.py expect "0.091770 EUR" format. The v2 payload always includes
+    *Calculated string variants — use those as the canonical price fields.
+    """
+    out = dict(item)
+    for float_key, str_key in _V2_PRICE_FIELD_MAP.items():
+        if str_key in out:
+            out[float_key] = out[str_key]
+    return out
 
 
 def _fetch_service_pricing(
@@ -28,11 +53,31 @@ def _fetch_service_pricing(
         Tuple of (service, items, error_message)
         error_message is None on success, or error string on failure.
     """
-    client = OTCPricingClient()
+    use_v2 = service in V2_ONLY_SERVICES
+    client = OTCPricingClient(base_url=V2_BASE_URL if use_v2 else DEFAULT_BASE_URL)
     try:
-        service_params = {**params, "serviceName": service}
-        response = client.get(service_params)
-        items = extract_items(response, service)
+        if use_v2:
+            # v2 uses array-style params: serviceName[0]=memo&region[0]=eu-de
+            v2_params: dict[str, Any] = {
+                k: v
+                for k, v in params.items()
+                if not k.startswith("filterBy[region]") and k != "serviceName"
+            }
+            v2_params["serviceName[0]"] = service
+            region_val = params.get("filterBy[region]")
+            if region_val:
+                v2_params["region[0]"] = region_val
+            response = client.get(v2_params)
+            # Normalize float price fields before PriceItem parsing
+            if isinstance(response.result, dict) and service in response.result:
+                response.result[service] = [
+                    _normalize_v2_item(it) for it in response.result[service]
+                ]
+            items = extract_items(response, service)
+        else:
+            service_params = {**params, "serviceName": service}
+            response = client.get(service_params)
+            items = extract_items(response, service)
         return (service, items, None)
     except Exception as e:
         return (service, [], str(e))
