@@ -25,6 +25,12 @@ logger = observability.get_logger(__name__)
 # Default API endpoint
 DEFAULT_BASE_URL = "https://calculator.otc-service.com/en/open-telekom-price-api/"
 
+# v2 endpoint — required for memory-optimized ECS (serviceName=memo, see #71)
+V2_BASE_URL = "https://calculator.otc-service.com/en/open-telekom-price-api/v2/"
+
+# Services that only exist on the v2 API
+V2_ONLY_SERVICES = frozenset({"memo"})
+
 
 class UpstreamError(RuntimeError):
     """Raised when the upstream OTC API returns an error.
