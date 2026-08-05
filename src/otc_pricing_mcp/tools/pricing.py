@@ -195,11 +195,19 @@ def query_pricing(
     }
 
 
+_COMPACT_FLAVOR_KEYS = (
+    "flavor_id", "flavor_name", "v_cpu", "ram", "os_unit",
+    "gpu_type", "gpu_count", "priceUSD", "unit",
+)
+
+
 def find_compute_flavor(
     v_cpu: int,
     ram_gb: float,
     os: str | None = None,
     region: str = "eu-de",
+    limit: int = 20,
+    include_pricing: bool = False,
 ) -> dict[str, Any]:
     """Find compute (ECS) instances matching vCPU/RAM/OS criteria.
 
@@ -209,10 +217,18 @@ def find_compute_flavor(
         os: OS type filter (e.g., 'Linux', 'Windows', 'Oracle', 'SUSE', 'CentOS').
             If None, returns all OS types.
         region: Region (default: 'eu-de'). Options: 'eu-de', 'eu-nl', 'eu-ch2'.
+        limit: Maximum number of matches to return (default 20). When the cap is
+               hit, 'truncated' and 'total_matches' fields are set in the response.
+        include_pricing: Return the full pricing payload per match (default False).
+                         When False, only compact fields are returned
+                         (flavor_id, v_cpu, ram, os_unit, gpu_type, gpu_count,
+                         priceUSD, unit). Use query_pricing for full detail.
 
     Returns:
         {
             'matches': [<flavor records>],
+            'total_matches': <int>,   # total before limit
+            'truncated': <bool>,
             'warnings': [<upstream error strings>],
             'notes': [<informational strings>, e.g. zero-row notice for the region]
         }
@@ -231,7 +247,7 @@ def find_compute_flavor(
     upstream_warnings: list[str] = list(result.get("warnings", []))
     upstream_notes: list[str] = list(result.get("notes", []))
 
-    matches: list[dict[str, Any]] = []
+    all_matches: list[dict[str, Any]] = []
     for item_dict in result.get("services", {}).get("ecs", []):
         # The price-calculator returns EVS storage rows under serviceName=ecs
         # (with product_id_parameter='ecs' but product_family='Storage'). We
@@ -261,6 +277,22 @@ def find_compute_flavor(
             if os.lower() not in os_unit.lower():
                 continue
 
-        matches.append(item_dict)
+        all_matches.append(item_dict)
 
-    return {"matches": matches, "warnings": upstream_warnings, "notes": upstream_notes}
+    total = len(all_matches)
+    truncated = total > limit
+    page = all_matches[:limit]
+
+    if not include_pricing:
+        page = [
+            {k: row[k] for k in _COMPACT_FLAVOR_KEYS if k in row}
+            for row in page
+        ]
+
+    return {
+        "matches": page,
+        "total_matches": total,
+        "truncated": truncated,
+        "warnings": upstream_warnings,
+        "notes": upstream_notes,
+    }
