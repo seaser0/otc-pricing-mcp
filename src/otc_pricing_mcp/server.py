@@ -88,14 +88,32 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="find_compute_flavor",
-            description="Find compute (ECS) instances matching vCPU/RAM/OS criteria. Returns {matches: [...], warnings: [...]}.",
+            description=(
+                "Find OTC ECS compute flavors by exact vCPU + RAM match. "
+                "Use for narrow lookups like '4vCPU/16GB Linux'. "
+                "Returns compact shape by default (flavor_id, vCPU, RAM, OS, GPU fields, priceUSD); "
+                "set include_pricing=true for full pricing detail. "
+                "Capped at limit=20 rows; check 'truncated' and 'total_matches' in the response. "
+                "For broad discovery (e.g. all GPU flavors) use query_pricing instead."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "v_cpu": {"type": "integer", "description": "Virtual CPUs"},
-                    "ram_gb": {"type": "number", "description": "RAM in GiB"},
-                    "os": {"type": "string", "description": "OS (Linux, Windows, etc.)"},
-                    "region": {"type": "string", "description": "Region (default: eu-de)"},
+                    "v_cpu": {"type": "integer", "description": "Virtual CPUs (exact match)"},
+                    "ram_gb": {"type": "number", "description": "RAM in GiB (exact match)"},
+                    "os": {"type": "string", "description": "OS filter (Linux, Windows, etc.)"},
+                    "region": {
+                        "type": "string",
+                        "description": "Region (default: eu-de). Options: eu-de, eu-nl, eu-ch2",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max matches to return (default 20)",
+                    },
+                    "include_pricing": {
+                        "type": "boolean",
+                        "description": "Return full pricing payload (default false)",
+                    },
                 },
                 "required": ["v_cpu", "ram_gb"],
             },
@@ -291,6 +309,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
                 arguments["ram_gb"],
                 arguments.get("os"),
                 arguments.get("region", "eu-de"),
+                arguments.get("limit", 20),
+                arguments.get("include_pricing", False),
             )
             text = json.dumps(result, ensure_ascii=False)
             warnings = result.get("warnings", [])

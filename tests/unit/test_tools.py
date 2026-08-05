@@ -543,8 +543,9 @@ class TestFindComputeFlavorFiltersStorage:
         result = find_compute_flavor(v_cpu=2, ram_gb=4, region="eu-de")
 
         assert len(result["matches"]) == 1
-        assert result["matches"][0]["product_family"] == "Compute"
-        assert all(m["product_family"] == "Compute" for m in result["matches"])
+        assert result["total_matches"] == 1
+        # compact mode (default): product_family not in response, but v_cpu is
+        assert result["matches"][0]["v_cpu"] == "2"
 
 
 class TestQueryPricingMaxResultsValidation:
