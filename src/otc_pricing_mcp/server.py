@@ -102,9 +102,18 @@ async def list_tools() -> list[Tool]:
                     "v_cpu": {"type": "integer", "description": "Virtual CPUs (exact match)"},
                     "ram_gb": {"type": "number", "description": "RAM in GiB (exact match)"},
                     "os": {"type": "string", "description": "OS filter (Linux, Windows, etc.)"},
-                    "region": {"type": "string", "description": "Region (default: eu-de). Options: eu-de, eu-nl, eu-ch2"},
-                    "limit": {"type": "integer", "description": "Max matches to return (default 20)"},
-                    "include_pricing": {"type": "boolean", "description": "Return full pricing payload (default false)"},
+                    "region": {
+                        "type": "string",
+                        "description": "Region (default: eu-de). Options: eu-de, eu-nl, eu-ch2",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max matches to return (default 20)",
+                    },
+                    "include_pricing": {
+                        "type": "boolean",
+                        "description": "Return full pricing payload (default false)",
+                    },
                 },
                 "required": ["v_cpu", "ram_gb"],
             },

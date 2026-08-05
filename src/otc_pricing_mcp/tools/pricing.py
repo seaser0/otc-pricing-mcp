@@ -196,8 +196,15 @@ def query_pricing(
 
 
 _COMPACT_FLAVOR_KEYS = (
-    "flavor_id", "flavor_name", "v_cpu", "ram", "os_unit",
-    "gpu_type", "gpu_count", "priceUSD", "unit",
+    "flavor_id",
+    "flavor_name",
+    "v_cpu",
+    "ram",
+    "os_unit",
+    "gpu_type",
+    "gpu_count",
+    "priceUSD",
+    "unit",
 )
 
 
@@ -284,10 +291,7 @@ def find_compute_flavor(
     page = all_matches[:limit]
 
     if not include_pricing:
-        page = [
-            {k: row[k] for k in _COMPACT_FLAVOR_KEYS if k in row}
-            for row in page
-        ]
+        page = [{k: row[k] for k in _COMPACT_FLAVOR_KEYS if k in row} for row in page]
 
     return {
         "matches": page,
