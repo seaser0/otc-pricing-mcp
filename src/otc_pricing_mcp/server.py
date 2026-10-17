@@ -11,8 +11,15 @@ import json
 import time
 from typing import Any
 
-from mcp.server import Server
-from mcp.types import CallToolResult, TextContent, Tool
+from mcp.server import Server, ServerRequestContext
+from mcp.types import (
+    CallToolRequestParams,
+    CallToolResult,
+    ListToolsResult,
+    PaginatedRequestParams,
+    TextContent,
+    Tool,
+)
 
 from . import observability
 from .tools.discovery import get_service_schema, list_regions, list_services
@@ -22,11 +29,7 @@ from .tools.pricing import find_compute_flavor, query_pricing
 
 logger = observability.get_logger(__name__)
 
-# Initialize MCP server
-server = Server("otc-pricing-mcp")
 
-
-@server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
 async def list_tools() -> list[Tool]:
     """List all available MCP tools."""
     logger.debug("list_tools_called")
@@ -34,7 +37,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="list_services",
             description="List all available OTC services with pricing data.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {},
                 "required": [],
@@ -43,7 +46,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="list_regions",
             description="List available regions for OTC services.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {},
                 "required": [],
@@ -52,7 +55,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_service_schema",
             description="Get the schema (filterable/returnable columns) for a service.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "service": {
@@ -66,7 +69,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="query_pricing",
             description="Query pricing data with flexible filtering and column selection.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "services": {
@@ -96,7 +99,7 @@ async def list_tools() -> list[Tool]:
                 "Capped at limit=20 rows; check 'truncated' and 'total_matches' in the response. "
                 "For broad discovery (e.g. all GPU flavors) use query_pricing instead."
             ),
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "v_cpu": {"type": "integer", "description": "Virtual CPUs (exact match)"},
@@ -121,7 +124,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="estimate_monthly_cost",
             description="Estimate monthly cost for a list of resources.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "items": {
@@ -153,7 +156,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="compare_billing_models",
             description="Compare PAYG vs. Reserved (12/24/36 month) billing for a product.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "product_id": {
@@ -179,7 +182,7 @@ async def list_tools() -> list[Tool]:
                 "and API reference. Returns ranked snippets with canonical doc URLs. "
                 "Source: opentelekomcloud-docs/<service> RST repos (Apache-2.0)."
             ),
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "query": {
@@ -212,7 +215,7 @@ async def list_tools() -> list[Tool]:
                 "Fetch the indexed body of one OTC documentation page (or a single "
                 "section of it) as Markdown. Use the URL returned by search_otc_docs."
             ),
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "url": {
@@ -235,15 +238,14 @@ async def list_tools() -> list[Tool]:
 
 def _ok(text: str) -> CallToolResult:
     """Wrap a successful tool result as a CallToolResult with isError=false."""
-    return CallToolResult(content=[TextContent(type="text", text=text)], isError=False)
+    return CallToolResult(content=[TextContent(type="text", text=text)], is_error=False)
 
 
 def _err(text: str) -> CallToolResult:
     """Wrap a failed tool result as a CallToolResult with isError=true."""
-    return CallToolResult(content=[TextContent(type="text", text=text)], isError=True)
+    return CallToolResult(content=[TextContent(type="text", text=text)], is_error=True)
 
 
-@server.call_tool()  # type: ignore[untyped-decorator]
 async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
     """Route tool calls to their implementations with logging and metrics.
 
@@ -422,3 +424,25 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         )
 
         return _err(f"Error executing tool '{name}': {e!s}")
+
+
+# mcp SDK 2.x registers handlers via the Server constructor instead of
+# decorators. list_tools/call_tool stay plain coroutines so tests can call
+# them directly; these adapters translate the SDK's (ctx, params) signature.
+async def _on_list_tools(
+    ctx: ServerRequestContext[Any], params: PaginatedRequestParams | None
+) -> ListToolsResult:
+    return ListToolsResult(tools=await list_tools())
+
+
+async def _on_call_tool(
+    ctx: ServerRequestContext[Any], params: CallToolRequestParams
+) -> CallToolResult:
+    return await call_tool(params.name, dict(params.arguments or {}))
+
+
+server: Server[Any] = Server(
+    "otc-pricing-mcp",
+    on_list_tools=_on_list_tools,
+    on_call_tool=_on_call_tool,
+)

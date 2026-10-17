@@ -166,13 +166,13 @@ class TestCallToolRouting:
         """Uncaught exceptions surface as isError=true on the CallToolResult (#12)."""
         with patch("otc_pricing_mcp.server.list_services", side_effect=RuntimeError("api down")):
             result = self._invoke_full("list_services", {})
-        assert result.isError is True
+        assert result.is_error is True
 
     def test_success_sets_isError_false(self) -> None:
         """Happy-path calls return isError=false (#12)."""
         with patch("otc_pricing_mcp.server.list_services", return_value=["ecs"]):
             result = self._invoke_full("list_services", {})
-        assert result.isError is False
+        assert result.is_error is False
 
     def test_query_pricing_upstream_error_sets_isError_true(self) -> None:
         """An empty result with warnings still propagates as isError=true (#4 contract preserved)."""
@@ -186,7 +186,7 @@ class TestCallToolRouting:
         }
         with patch("otc_pricing_mcp.server.query_pricing", return_value=bad_result):
             result = self._invoke_full("query_pricing", {"services": ["ecs"]})
-        assert result.isError is True
+        assert result.is_error is True
 
     def test_search_otc_docs_routes(self) -> None:
         """search_otc_docs is wired into call_tool (#5)."""
@@ -198,7 +198,7 @@ class TestCallToolRouting:
         }
         with patch("otc_pricing_mcp.server.search_otc_docs", return_value=fake):
             result = self._invoke_full("search_otc_docs", {"query": "ecs"})
-        assert result.isError is False
+        assert result.is_error is False
         assert json.loads(result.content[0].text) == fake
 
     def test_get_otc_doc_section_routes(self) -> None:
@@ -214,7 +214,7 @@ class TestCallToolRouting:
         }
         with patch("otc_pricing_mcp.server.get_otc_doc_section", return_value=fake):
             result = self._invoke_full("get_otc_doc_section", {"url": "u"})
-        assert result.isError is False
+        assert result.is_error is False
 
     def test_get_otc_doc_section_unmatched_sets_isError(self) -> None:
         """An unindexed URL surfaces as isError=true (#5 — no silent empties)."""
@@ -229,4 +229,4 @@ class TestCallToolRouting:
         }
         with patch("otc_pricing_mcp.server.get_otc_doc_section", return_value=fake):
             result = self._invoke_full("get_otc_doc_section", {"url": "u"})
-        assert result.isError is True
+        assert result.is_error is True

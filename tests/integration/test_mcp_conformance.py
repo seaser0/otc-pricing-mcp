@@ -24,6 +24,12 @@ class TestMCPToolRegistration:
         assert server.name == "otc-pricing-mcp"
 
     @pytest.mark.conformance
+    def test_tool_handlers_registered(self) -> None:
+        """tools/list and tools/call are wired via the mcp 2.x constructor API."""
+        assert server.get_request_handler("tools/list") is not None
+        assert server.get_request_handler("tools/call") is not None
+
+    @pytest.mark.conformance
     def test_all_seven_tools_registered(self) -> None:
         """All 7 tools are registered with the server."""
         # Note: In a real environment, we'd call server.list_tools()
