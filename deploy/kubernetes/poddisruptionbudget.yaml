@@ -6,7 +6,9 @@ metadata:
   labels:
     app: otc-pricing-mcp
 spec:
-  minAvailable: 1
+  # Single replica: minAvailable: 1 would block every node drain forever. maxUnavailable: 1 still
+  # limits voluntary disruptions to one pod and lets kubectl drain proceed.
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: otc-pricing-mcp

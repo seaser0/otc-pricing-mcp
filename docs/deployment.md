@@ -42,7 +42,7 @@ Kubernetes cluster
     ├── Service: ClusterIP on port 8080
     ├── Ingress: TLS via cert-manager
     ├── ServiceMonitor: Prometheus metrics scraping
-    ├── PodDisruptionBudget: HA (minAvailable=1)
+    ├── PodDisruptionBudget: maxUnavailable=1 (drains stay possible with 1 replica)
     └── NetworkPolicy: Egress to OTC API only
 ```
 
@@ -190,13 +190,11 @@ kubectl get pods -n mcp-otc-pricing --watch
 ### Test PodDisruptionBudget
 
 ```bash
-# Check PDB prevents disruptions
-kubectl get pdb -n mcp-otc-pricing otc-pricing-mcp
+# PDB allows at most one voluntary disruption at a time
+kubectl get pdb -n mcp-otc-pricing otc-pricing-mcp   # ALLOWED DISRUPTIONS: 1
 
-# Try to drain all pods in the namespace (should fail to maintain minAvailable=1)
-kubectl drain <node-name> --ignore-daemonsets --dry-run=client
-
-# Expected: error about PodDisruptionBudget blocking drain if it would violate minAvailable
+# A node drain must not hang on this pod (single replica: minAvailable=1 would block it forever)
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data --dry-run=server
 ```
 
 ### Test NetworkPolicy
