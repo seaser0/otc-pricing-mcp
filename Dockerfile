@@ -25,6 +25,10 @@ RUN uv sync --frozen --no-dev
 # a venv and native extensions (pydantic-core, cryptography) built for 3.12.
 FROM python:3.12-slim
 
+# Pull Debian security fixes (zlib1g) not yet in the base image
+RUN apt-get update && apt-get upgrade -y --no-install-recommends zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
 # Create a non-root user with the same UID (65532) used by distroless nonroot,
 # so Kubernetes securityContext runAsUser values stay consistent.
 RUN useradd --no-create-home --no-log-init --uid 65532 --gid 0 nonroot
